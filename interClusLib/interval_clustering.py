@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import os
+from sklearn.cluster import AgglomerativeClustering
+from interClusLib.similarity_distance import IntervalMetrics
 
 class IntervalKMeans:
     """
@@ -91,3 +93,68 @@ class IntervalKMeans:
         """
         labels = self._assign_clusters(intervals, self.centroids_, distance_func)
         return labels
+    
+class IntervalAgglomerativelustering:
+    """
+    An Agglomerative (Hierarchical) Clustering for interval data (n_dims, 2).
+    Uses a precomputed distance matrix from a custom distance function.
+    """
+    distance_metrics = {"hausdorff", "range_euclidean", "manhattan"}
+    similarity_metrics = {"jaccard", "dice", "bidrectional", "generalized_jaccard"}
+
+    def __init__(self, n_clusters=2, linkage='average',):
+        """
+        :param n_clusters: int, number of clusters to find (you can also set distance_threshold instead).
+        :param linkage: str, linkage criterion ('ward', 'complete', 'average', 'single').
+        :param distance_func: a function(interval_a, interval_b) -> distance (scalar).
+        :param aggregate: str, how to combine distance across dimensions if needed (e.g., 'mean', 'sum', 'max').
+        """
+        self.n_clusters = n_clusters
+        self.linkage = linkage
+
+        self.model_ = None
+        self.labels_ = None
+    
+    def fit(self, intervals, metric, aggregate, convert_mode = None):
+        """
+        :param intervals: shape (n_samples, n_dims, 2)
+        """
+        if metric in self.distance_metrics:
+            dist_matrix = IntervalMetrics.pairwise_distance(
+                intervals, 
+                metric=metric,
+                aggregate=aggregate
+            )
+        elif metric in self.similarity_metrics:
+            sim_matrix = IntervalMetrics.pairwise_similarity(
+                intervals, 
+                metric=metric,
+                aggregate=aggregate
+            )
+            dist_matrix = IntervalMetrics.sim_to_dist(sim_matrix, mode=convert_mode)
+        else:
+            raise ValueError(f"Unsupported metric: {self.metric}")
+
+        
+        self.model_ = AgglomerativeClustering(
+            n_clusters=self.n_clusters,
+            metric='precomputed',  # or metric='precomputed' in newer sklearn
+            linkage=self.linkage,
+            compute_distances=True
+        )
+        self.model_.fit(dist_matrix)
+
+        self.labels_ = self.model_.labels_
+        
+    def fit_predict(self, intervals):
+        self.fit(intervals)
+        return self.labels_
+
+    def get_labels(self):
+        if self.labels_ is None:
+            raise RuntimeError("Model not fitted yet.")
+        return self.labels_
+
+
+
+    
