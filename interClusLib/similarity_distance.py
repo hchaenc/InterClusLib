@@ -113,7 +113,7 @@ class IntervalMetrics:
     
     # ========== 2. Single-Dimension Interval Distance Measures ==========
     @staticmethod
-    def hausdorff_distance(interval1, interval2, epsilon=0):
+    def hausdorff_distance(interval1, interval2, epsilon=None):
         """
         Calculate the Hausdorff distance between two interval values.
 
@@ -132,7 +132,7 @@ class IntervalMetrics:
         if np.sign(diff1) == np.sign(diff2):
             delta_min = min(abs(diff1), abs(diff2))
         else:
-            delta_min = epsilon
+            delta_min = epsilon if epsilon is not None else 0
 
         delta_max = max(abs(diff2), abs(diff1))
 
@@ -140,7 +140,7 @@ class IntervalMetrics:
         return mean_metric   
 
     @staticmethod
-    def range_euclidean_distance(interval1, interval2):
+    def euclidean_distance(interval1, interval2):
         """
         Calculate the Euclidean distance between the range of two interval values.
 
@@ -176,108 +176,108 @@ class IntervalMetrics:
         return abs(diff1) + abs(diff2)
     
     # ========== 3. Multi-Dimension Interval Measures ==========
-    @classmethod
-    def jaccard_similarity_md(cls, interval_a, interval_b, aggregate="mean"):
+    def jaccard_similarity_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional jaccard similarity.
 
         :param interval_a: shape (n_dims, 2)
         :param interval_b: shape (n_dims, 2)
         :param aggregate: how to combine results (e.g., "mean", "min", "prod")
-        :return: scalar similarity (usually in [0,1])
+        :return: scalar distance
         """
         n_dims = interval_a.shape[0]
-        sims = []
+        dists = []
         for d in range(n_dims):
             sim_1d = cls.jaccard_similarity(interval_a[d], interval_b[d])
-            sims.append(sim_1d)
+            dist_1d = 1.0 - sim_1d   # similarity -> distance
+            dists.append(dist_1d)
 
         if aggregate == "mean":
-            return np.mean(sims)
-        elif aggregate == "min": 
-            return np.min(sims)
-        elif aggregate == "prod":  
-            return np.prod(sims)
+            return np.mean(dists)
+        elif aggregate == "sum":
+            return np.sum(dists)
+        elif aggregate == "max":
+            return np.max(dists)
         else:
             raise ValueError(f"Unsupported aggregate method: {aggregate}")
 
-    @classmethod
-    def dice_similarity_md(cls, interval_a, interval_b, aggregate="mean"):
+    def dice_similarity_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional dice similarity.
 
         :param interval_a: shape (n_dims, 2)
         :param interval_b: shape (n_dims, 2)
         :param aggregate: how to combine results (e.g., "mean", "min", "prod")
-        :return: scalar similarity (usually in [0,1])
+        :return: scalar distance
         """
         n_dims = interval_a.shape[0]
-        sims = []
+        dists = []
         for d in range(n_dims):
             sim_1d = cls.dice_similarity(interval_a[d], interval_b[d])
-            sims.append(sim_1d)
+            dist_1d = 1.0 - sim_1d   # similarity -> distance
+            dists.append(dist_1d)
 
         if aggregate == "mean":
-            return np.mean(sims)
-        elif aggregate == "min": 
-            return np.min(sims)
-        elif aggregate == "prod":  
-            return np.prod(sims)
+            return np.mean(dists)
+        elif aggregate == "sum":
+            return np.sum(dists)
+        elif aggregate == "max":
+            return np.max(dists)
         else:
             raise ValueError(f"Unsupported aggregate method: {aggregate}")
     
-    @classmethod
-    def bidrectional_subset_similarity_md(cls, interval_a, interval_b, aggregate="mean"):
+    def bidrectional_subset_similarity_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional bidrectional subset similarity.
 
         :param interval_a: shape (n_dims, 2)
         :param interval_b: shape (n_dims, 2)
         :param aggregate: how to combine results (e.g., "mean", "min", "prod")
-        :return: scalar similarity (usually in [0,1])
+        :return: scalar distance
         """
         n_dims = interval_a.shape[0]
-        sims = []
+        dists = []
         for d in range(n_dims):
-            sim_1d = cls.bidrectional_subset_similarity(interval_a[d], interval_b[d])
-            sims.append(sim_1d)
+            sim_1d = cls.bidrectional_subset_similarity(interval_a[d], interval_b[d], weights=None)
+            dist_1d = 1.0 - sim_1d   # similarity -> distance
+            dists.append(dist_1d)
 
         if aggregate == "mean":
-            return np.mean(sims)
-        elif aggregate == "min": 
-            return np.min(sims)
-        elif aggregate == "prod":  
-            return np.prod(sims)
+            return np.mean(dists)
+        elif aggregate == "sum":
+            return np.sum(dists)
+        elif aggregate == "max":
+            return np.max(dists)
         else:
             raise ValueError(f"Unsupported aggregate method: {aggregate}")
 
-    @classmethod
-    def generalized_jaccard_similarity_md(cls, interval_a, interval_b, aggregate="mean"):
+    def generalized_jaccard_similarity_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional generalized jaccard similarity.
 
         :param interval_a: shape (n_dims, 2)
         :param interval_b: shape (n_dims, 2)
         :param aggregate: how to combine results (e.g., "mean", "min", "prod")
-        :return: scalar similarity (usually in [0,1])
+        :return: scalar distance
         """
         n_dims = interval_a.shape[0]
-        sims = []
+        dists = []
         for d in range(n_dims):
             sim_1d = cls.generalized_jaccard_similarity(interval_a[d], interval_b[d])
-            sims.append(sim_1d)
+            dist_1d = 1.0 - sim_1d   # similarity -> distance
+            dists.append(dist_1d)
 
         if aggregate == "mean":
-            return np.mean(sims)
-        elif aggregate == "min": 
-            return np.min(sims)
-        elif aggregate == "prod":  
-            return np.prod(sims)
+            return np.mean(dists)
+        elif aggregate == "sum":
+            return np.sum(dists)
+        elif aggregate == "max":
+            return np.max(dists)
         else:
             raise ValueError(f"Unsupported aggregate method: {aggregate}")
         
-    @classmethod
-    def hausdorff_distance_md(cls, interval_a, interval_b, aggregate="mean"):
+        
+    def hausdorff_distance_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional Hausdorff distance.
 
@@ -301,8 +301,7 @@ class IntervalMetrics:
         else:
             raise ValueError(f"Unsupported aggregate method: {aggregate}")
     
-    @classmethod
-    def range_euclidean_distance_md(cls, interval_a, interval_b, aggregate="mean"):
+    def euclidean_distance_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional range euclidean distance.
 
@@ -314,7 +313,7 @@ class IntervalMetrics:
         n_dims = interval_a.shape[0]
         distances = []
         for d in range(n_dims):
-            dist_1d = IntervalMetrics.range_euclidean_distance(interval_a[d], interval_b[d])
+            dist_1d = IntervalMetrics.euclidean_distance(interval_a[d], interval_b[d])
             distances.append(dist_1d)
 
         if aggregate == "mean":
@@ -326,8 +325,7 @@ class IntervalMetrics:
         else:
             raise ValueError(f"Unsupported aggregate method: {aggregate}")
     
-    @classmethod
-    def manhattan_distance_md(cls, interval_a, interval_b, aggregate="mean"):
+    def manhattan_distance_md(interval_a, interval_b, aggregate="mean"):
         """
         Multi-dimensional manhattan distance.
 
@@ -428,8 +426,8 @@ class IntervalMetrics:
                 if metric == "hausdorff":
                     dist_matrix[i, j] = IntervalMetrics.hausdorff_distance_md(
                         intervals[i], intervals[j], aggregate=aggregate)
-                elif metric == "range_euclidean":
-                    dist_matrix[i, j] = IntervalMetrics.range_euclidean_distance_md(
+                elif metric == "euclidean":
+                    dist_matrix[i, j] = IntervalMetrics.euclidean_distance_md(
                         intervals[i], intervals[j], aggregate=aggregate)
                 elif metric == "manhattan":
                     dist_matrix[i, j] = IntervalMetrics.manhattan_distance_md(
@@ -437,4 +435,14 @@ class IntervalMetrics:
                 else:
                     raise ValueError(f"Unsupported metric: {metric}")
         return dist_matrix
+    
+    MULTI_FUNCS = {
+        "hausdorff": hausdorff_distance,
+        "manhattan": manhattan_distance,
+        "euclidean": euclidean_distance,
+        "jaccard": jaccard_similarity,
+        "dice": dice_similarity,
+        "bidirectional": bidrectional_subset_similarity,
+        "generalized_jaccard": generalized_jaccard_similarity,
+    }
     
