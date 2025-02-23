@@ -3,10 +3,13 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import seaborn as sns
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.cluster.hierarchy import dendrogram
 
 class ClusteringVisualization:
+    def draw_heat_map(distance_matrix, ax = None ,cmap = 'coolwarm', annot=False, cbar=True):
+        sns.heatmap(distance_matrix, cmap = cmap, annot = annot, cbar = cbar, ax = ax )
     
     def draw_interval_squares(ax, intervals, labels=None):
         """
