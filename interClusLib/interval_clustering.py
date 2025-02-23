@@ -15,7 +15,7 @@ class IntervalKMeans:
     A custom K-Means clustering for interval data
     """
 
-    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, random_state=42):
+    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, distance_func= 'euclidean',random_state=42):
         """
         :param n_clusters: number of clusters
         :param max_iter: maximum number of iterations
@@ -26,7 +26,20 @@ class IntervalKMeans:
         self.max_iter = max_iter
         self.tol = tol
         self.random_state = np.random.RandomState(random_state)
-    
+
+        sim_funcs_md = IntervalMetrics.get_similarity_funcs_md()
+        dis_funcs_md = IntervalMetrics.get_distance_funcs_md()
+
+        if distance_func in sim_funcs_md:
+            self.distance_function = sim_funcs_md[distance_func]
+            self.isSim = True
+        elif distance_func in dis_funcs_md:
+            self.distance_function = dis_funcs_md[distance_func]
+            self.isSim = False
+        else:
+            valid_funcs = ", ".join(list(sim_funcs_md.keys()) + list(dis_funcs_md.keys()))
+            raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
+
     def _init_centroids(self, intervals):
         """
         Initialize cluster centroids by randomly picking samples from 'intervals'.
@@ -46,7 +59,7 @@ class IntervalKMeans:
         # mean of lower bounds, mean of upper bounds dimension-wise
         return np.mean(intervals_in_cluster, axis=0)
     
-    def _assign_clusters(self, intervals, centroids, distance_func, operator):
+    def _assign_clusters(self, intervals, centroids):
         """
         Assign each sample in 'intervals' to the nearest centroid using 'distance_func'.
         """
@@ -55,11 +68,14 @@ class IntervalKMeans:
 
         for i in range(n_samples):
             # compute distance to each centroid
-            dists = [distance_func(intervals[i], c, operator) for c in centroids]
-            labels[i] = np.argmin(dists)
+            dists = [self.distance_function(intervals[i], c) for c in centroids]
+            if self.isSim:
+                labels[i] = np.argmax(dists)  # 相似性：选择值最大的 centroid
+            else:
+                labels[i] = np.argmin(dists)
         return labels
     
-    def fit(self, intervals, distance_func, operator):
+    def fit(self, intervals):
         """
         intervals: shape (n_samples, n_dims, 2)
         distance_func: function that takes (interval_a, interval_b) and returns a scalar distance
@@ -69,7 +85,7 @@ class IntervalKMeans:
 
         for iteration in range(self.max_iter):
             # 2. Assign clusters
-            labels = self._assign_clusters(intervals, centroids, distance_func, operator)
+            labels = self._assign_clusters(intervals, centroids)
 
             # 3. Compute new centroids
             new_centroids = []
@@ -93,11 +109,11 @@ class IntervalKMeans:
         self.centroids_ = centroids
         self.labels_ = labels
 
-    def predict(self, intervals, distance_func):
+    def predict(self, intervals):
         """
         Assign new data points to the closest cluster.
         """
-        labels = self._assign_clusters(intervals, self.centroids_, distance_func)
+        labels = self._assign_clusters(intervals, self.centroids_)
         return labels
     
 class IntervalAgglomerativelustering:
@@ -105,10 +121,10 @@ class IntervalAgglomerativelustering:
     An Agglomerative (Hierarchical) Clustering for interval data (n_dims, 2).
     Uses a precomputed distance matrix from a custom distance function.
     """
-    distance_metrics = {"hausdorff", "euclidean", "manhattan"}
-    similarity_metrics = {"jaccard", "dice", "bidrectional", "generalized_jaccard"}
+    distance_funcs = {"hausdorff", "euclidean", "manhattan"}
+    similarity_funcs = {"jaccard", "dice", "bidrectional", "generalized_jaccard"}
 
-    def __init__(self, n_clusters=2, linkage='average',):
+    def __init__(self, n_clusters=2, linkage='average', distance_func = 'euclidean'):
         """
         :param n_clusters: int, number of clusters to find (you can also set distance_threshold instead).
         :param linkage: str, linkage criterion ('complete', 'average', 'single').
@@ -120,27 +136,35 @@ class IntervalAgglomerativelustering:
 
         self.model_ = None
         self.labels_ = None
+        self.distance_func = distance_func
+
+        if self.distance_func in self.distance_funcs:
+            self.isSim = False
+        elif self.distance_func in self.similarity_funcs:
+            self.isSim = True
+        else:
+            raise ValueError(f"Unsupported metric: {self.distance_func}")
     
-    def fit(self, intervals, metric, aggregate, convert_mode = None):
+    def compute_distance_matrix(self, intervals):
+        if self.isSim:
+            dist_matrix = IntervalMetrics.pairwise_similarity(
+                intervals, 
+                metric=self.distance_func
+            )
+            dist_matrix = 1 - dist_matrix
+        else:
+            dist_matrix = IntervalMetrics.pairwise_distance(
+                intervals, 
+                metric=self.distance_func
+            )
+        return dist_matrix
+
+    def fit(self, intervals, convert_mode = None):
         """
         :param intervals: shape (n_samples, n_dims, 2)
         """
-        if metric in self.distance_metrics:
-            dist_matrix = IntervalMetrics.pairwise_distance(
-                intervals, 
-                metric=metric,
-                aggregate=aggregate
-            )
-        elif metric in self.similarity_metrics:
-            dist_matrix = IntervalMetrics.pairwise_similarity(
-                intervals, 
-                metric=metric,
-                aggregate=aggregate
-            )
-        else:
-            raise ValueError(f"Unsupported metric: {self.metric}")
+        dist_matrix = self.compute_distance_matrix(intervals)
 
-        
         self.model_ = AgglomerativeClustering(
             n_clusters=self.n_clusters,
             metric='precomputed',  # or metric='precomputed' in newer sklearn
@@ -159,7 +183,6 @@ class IntervalAgglomerativelustering:
         if self.labels_ is None:
             raise RuntimeError("Model not fitted yet.")
         return self.labels_
-
 
 class IntervalFuzzyCMeans:
     """
@@ -195,7 +218,7 @@ class IntervalFuzzyCMeans:
                  max_iter=100,
                  tol=1e-5,
                  adaptive_weights=False,
-                 metric = "euclidean",
+                 distance_func = "euclidean",
                  ):
         """
         Parameters
@@ -219,13 +242,25 @@ class IntervalFuzzyCMeans:
         self.max_iter = max_iter
         self.tol = tol
         self.adaptive_weights = adaptive_weights
-        self.metric = metric
 
         self.U = None
         self.centers_a = None  # shape (n_clusters, n_dims)
         self.centers_b = None  # shape (n_clusters, n_dims)
         self.k = None          # shape (n_clusters, n_dims) if adaptive_weights=True
         self.objective_ = None
+
+        sim_funcs = IntervalMetrics.get_similarity_funcs()
+        dis_funcs = IntervalMetrics.get_distance_funcs()
+
+        if distance_func in sim_funcs:
+            self.distance_function = sim_funcs[distance_func]
+            self.isSim = True
+        elif distance_func in dis_funcs:
+            self.distance_function = dis_funcs[distance_func]
+            self.isSim = False
+        else:
+            valid_funcs = ", ".join(list(sim_funcs.keys()) + list(dis_funcs.keys()))
+            raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
 
     def _init_membership(self, n_samples):
         """
@@ -278,14 +313,11 @@ class IntervalFuzzyCMeans:
         """
         distances = np.zeros(x_k.shape[0], dtype=np.float64)
 
-        # Choose distance function
-        if self.metric in IntervalMetrics.MULTI_FUNCS:
-            distance_func = IntervalMetrics.MULTI_FUNCS[self.metric]
-        else:
-            raise ValueError(f"Unsupported distance_method = {self.metric}")
-
         for j in range(x_k.shape[0]):
-            distances[j] = distance_func(x_k[j], c_i[j])
+            if self.isSim:
+                distances[j] = 1 - self.distance_function(x_k[j], c_i[j])
+            else:
+                distances[j] = self.distance_function(x_k[j], c_i[j])
 
         return distances
 
@@ -528,16 +560,16 @@ class IntervalSOM:
                  x,
                  y,
                  n_dims,
-                 sigma_init,
-                 sigma_final,
                  learning_rate,
                  total_iterations,
-                 decay_function = 'asymptotic_decay',
+                 sigma_init,
+                 sigma_final = None,
+                 decay_function = 'linear_decay_to_zero',
                  neighborhood_function = 'gaussian',
                  activation_distance = 'euclidean',
                  topology='rectangular',
                  random_seed=None,
-                 sigma_decay_function='asymptotic_decay'):
+                 sigma_decay_function='linear_interpolate'):
         """
         Initializes an Interval Self-Organizing Map (SOM).
 
@@ -645,13 +677,18 @@ class IntervalSOM:
         sig_decay_functions = {
             'inverse_decay_to_one': self._inverse_decay_to_one,
             'linear_decay_to_one': self._linear_decay_to_one,
-            'asymptotic_decay': self._asymptotic_decay
+            'asymptotic_decay': self._asymptotic_decay,
+            'linear_interpolate': self._linear_interpolate
+            
         }
 
         if sigma_decay_function not in sig_decay_functions:
             msg = '%s not supported. Functions available: %s'
             raise ValueError(msg % (sigma_decay_function, ', '.join(sig_decay_functions.keys())))
 
+        if sigma_decay_function == 'linear_interpolate' and self.sigma_final == 0:
+            msg = "Error: Using 'linear_interpolate' requires sigma_final > 0."
+            raise ValueError(msg)
         self._sigma_decay_function = sig_decay_functions[sigma_decay_function]
         
         # 6) Define neighborhood influence functions
@@ -669,26 +706,25 @@ class IntervalSOM:
         if neighborhood_function in ['triangle', 'bubble'] and (divmod(sigma, 1)[1] != 0 or sigma < 1):
             warn('sigma should be an integer >=1 when triangle or bubble are used as neighborhood function')
 
-        self.neighborhood = neig_functions[neighborhood_function]
+        self._neighborhood = neig_functions[neighborhood_function]
 
         # 7) Define distance functions for computing the BMU (Best Matching Unit)
-        distance_functions = {
-            'euclidean': IntervalMetrics.euclidean_distance_md,
-            'manhattan': IntervalMetrics.manhattan_distance_md,
-            'jaccard': IntervalMetrics.jaccard_similarity_md,
-            'dice': IntervalMetrics.dice_similarity_md,
-            'bidirectional_subset': IntervalMetrics.bidrectional_subset_similarity_md,
-            'generalized_jaccard': IntervalMetrics.generalized_jaccard_similarity_md,
-            'hausdorff': IntervalMetrics.hausdorff_distance_md
-        }
+        sim_funcs_md = IntervalMetrics.get_similarity_funcs_md()
+        dis_funcs_md = IntervalMetrics.get_distance_funcs_md()
 
         # Validate and assign the activation distance function
         if isinstance(activation_distance, str):
-            if activation_distance not in distance_functions:
-                msg = '%s not supported. Available distances: %s'
-                raise ValueError(msg % (activation_distance, ', '.join(distance_functions.keys())))
-
-            self._activation_distance = distance_functions[activation_distance]
+            if activation_distance in sim_funcs_md:
+                self._activation_distance = sim_funcs_md[activation_distance]
+                self.isSim = True
+            elif activation_distance in dis_funcs_md:
+                self._activation_distance = dis_funcs_md[activation_distance]
+                self.isSim = False
+            else:
+                raise ValueError(f"'{activation_distance}' not supported. "
+                    f"Available distance functions: {', '.join(dis_funcs_md.keys())}, "
+                    f"Available similarity functions: {', '.join(sim_funcs_md.keys())}"
+                )
         elif callable(activation_distance):
             self._activation_distance = activation_distance
 
@@ -826,8 +862,8 @@ class IntervalSOM:
         """Sigma decreases linearly to 1."""
         return sigma + (t * (1 - sigma) / max_iter)
     
-    def _linear_interpolate(self, start, end, t, total):
-        return start + (t/float(total))*(end - start)
+    def _linear_interpolate(self, sigma, t, max_iter):
+        return sigma + (t/float(max_iter))*(self.sigma_final - sigma)
 
     # -------------- neighborhood functions -------------
     def _gaussian(self, c, sigma):
@@ -908,6 +944,8 @@ class IntervalSOM:
             for i in range(self.x):
                 for j in range(self.y):
                     dist_mat[s,col] = self._activation_distance(sample, self.prototypes[i,j])
+                    if self.isSim:
+                        dist_mat[s,col] = 1 - dist_mat[s,col]
                     col+=1
         return dist_mat
     
@@ -920,6 +958,8 @@ class IntervalSOM:
         for i in range(self.x):
             for j in range(self.y):
                 dist_ij = self._activation_distance(interval, self.prototypes[i,j])
+                if self.isSim:
+                    dist_ij = 1 - dist_ij
                 if dist_ij<min_dist:
                     min_dist=dist_ij
                     best=(i,j)
@@ -960,13 +1000,13 @@ class IntervalSOM:
             bmu_ij = self.winner(sample)
 
             # 3. Compute new learning rate
-            lr_t = self._linear_decay_to_zero(self.learning_rate, t, self.total_iterations)
+            lr_t = self._learning_rate_decay_function(self.learning_rate, t, self.total_iterations)
 
             # 4. Compute new sigma
-            sig_t = self._linear_interpolate(self.sigma_init, self.sigma_final, t, self.total_iterations)
+            sig_t = self._sigma_decay_function(self.sigma_init, t, self.total_iterations)
 
             # 5. Compute neighbor matrix
-            neigh = self._gaussian(bmu_ij, sig_t)
+            neigh = self._neighborhood(bmu_ij, sig_t)
 
             # 6. Update prototypes with partial "pull" on intervals
             for i in range(self.x):
@@ -996,7 +1036,7 @@ class IntervalSOM:
         intervals_l = 0.5*(intervals[...,1]-intervals[...,0]) # shape(N,n_dims)
         for t in range(self.total_iterations):
             # compute sigma
-            sig_t = self._linear_interpolate(self.sigma_init, self.sigma_final, t, self.total_iterations)
+            sig_t = self._sigma_decay_function(self.sigma_init, t, self.total_iterations)
             # compute dist => bmu
             dist_mat = self._distance_from_weights(intervals)
             bmu_flat = np.argmin(dist_mat, axis=1)    # shape(N,) => best neuron in flatten (i*y + j)
@@ -1006,8 +1046,8 @@ class IntervalSOM:
                 bf = bmu_flat[s]
                 c_i = bf//self.y
                 c_j = bf%self.y
-                # high-level => neighbor = gaussian( c, sigma )[i,j]
-                nb_mat = self._gaussian( (c_i,c_j), sig_t )  # shape(x,y)
+                # high-level => neighbor
+                nb_mat = self._neighborhood( (c_i,c_j), sig_t )  # shape(x,y)
                 neighbor_w[:,:,s] = nb_mat
 
             # update prototypes => WeightedMedian
@@ -1084,6 +1124,9 @@ class IntervalSOM:
         return np.mean(mins)
 
     def get_prototypes(self):
+        """
+        return prototypes
+        """
         return self.prototypes
 
     def get_neuron_assignments(self, data, return_indices=False):
@@ -1106,7 +1149,6 @@ class IntervalSOM:
             - If return_indices=False: { (i, j): [sample_1, sample_2, ...] }
             - If return_indices=True:  { (i, j): [index_1, index_2, ...] }
         """
-
         # Ensure data shape is valid, e.g., (N, n_dims, 2)
         assignment_map = defaultdict(list)
 
