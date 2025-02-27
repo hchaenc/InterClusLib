@@ -3,7 +3,8 @@ import numpy as np
 from collections import defaultdict
 from interClusLib.similarity_distance import IntervalMetrics
 
-class Evaluation:
+class SilhouetteScore:
+
     @staticmethod
     def silhouette_score(data, labels, metric) -> float:
         """
@@ -121,5 +122,3 @@ class Evaluation:
         
         # 4) Return mean
         return np.mean(silhouette_vals)
-
-    
