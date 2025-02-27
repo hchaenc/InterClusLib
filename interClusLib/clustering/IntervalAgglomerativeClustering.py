@@ -3,7 +3,7 @@ import numpy as np
 from numpy.random import RandomState
 from warnings import warn
 from sklearn.cluster import AgglomerativeClustering
-from interClusLib.similarity_distance import IntervalMetrics
+from interClusLib.metric import *
 import os
 
 class IntervalAgglomerativeClustering:
@@ -12,7 +12,7 @@ class IntervalAgglomerativeClustering:
     Uses a precomputed distance matrix from a custom distance function.
     """
     distance_funcs = {"hausdorff", "euclidean", "manhattan"}
-    similarity_funcs = {"jaccard", "dice", "bidrectional_min","bidrectional_prod", "marginal"}
+    similarity_funcs = {"jaccard", "dice", "bidirectional_min","bidirectional_prod", "marginal"}
 
     def __init__(self, n_clusters=2, linkage='average', distance_func = 'euclidean'):
         """
@@ -37,13 +37,13 @@ class IntervalAgglomerativeClustering:
     
     def compute_distance_matrix(self, intervals):
         if self.isSim:
-            dist_matrix = IntervalMetrics.pairwise_similarity(
+            dist_matrix = pairwise_similarity(
                 intervals, 
                 metric=self.distance_func
             )
             dist_matrix = 1 - dist_matrix
         else:
-            dist_matrix = IntervalMetrics.pairwise_distance(
+            dist_matrix = pairwise_distance(
                 intervals, 
                 metric=self.distance_func
             )
@@ -94,10 +94,10 @@ class IntervalAgglomerativeClustering:
         """使用KNN方法预测"""
         # 计算新数据与训练数据之间的距离
         if self.ifSim:
-            cross_dist = IntervalMetrics.cross_similarity(intervals_new, self.train_data, metric = self.distance_func)
+            cross_dist = cross_similarity(intervals_new, self.train_data, metric = self.distance_func)
             cross_dist = 1 - cross_dist
         else:
-            cross_dist = IntervalMetrics.cross_distance(intervals_new, self.train_data, metric = self.distance_func)
+            cross_dist = cross_distance(intervals_new, self.train_data, metric = self.distance_func)
         
         # 对每个新样本，找到k个最近的训练样本
         predictions = []

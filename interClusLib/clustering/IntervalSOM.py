@@ -5,7 +5,7 @@ from math import sqrt
 from numpy.random import RandomState
 from warnings import warn
 from sklearn.decomposition import PCA
-from interClusLib.similarity_distance import IntervalMetrics
+from interClusLib.metric import MULTI_SIMILARITY_FUNCTIONS, MULTI_DISTANCE_FUNCTIONS
 from collections import defaultdict
 import os
 
@@ -163,23 +163,17 @@ class IntervalSOM:
 
         self._neighborhood = neig_functions[neighborhood_function]
 
-        # 7) Define distance functions for computing the BMU (Best Matching Unit)
-        sim_funcs_md = IntervalMetrics.get_similarity_funcs_md()
-        dis_funcs_md = IntervalMetrics.get_distance_funcs_md()
-
         # Validate and assign the activation distance function
         if isinstance(activation_distance, str):
-            if activation_distance in sim_funcs_md:
-                self._activation_distance = sim_funcs_md[activation_distance]
+            if activation_distance in MULTI_SIMILARITY_FUNCTIONS:
+                self._activation_distance = MULTI_SIMILARITY_FUNCTIONS[activation_distance]
                 self.isSim = True
-            elif activation_distance in dis_funcs_md:
-                self._activation_distance = dis_funcs_md[activation_distance]
+            elif activation_distance in MULTI_DISTANCE_FUNCTIONS:
+                self._activation_distance = MULTI_DISTANCE_FUNCTIONS[activation_distance]
                 self.isSim = False
             else:
-                raise ValueError(f"'{activation_distance}' not supported. "
-                    f"Available distance functions: {', '.join(dis_funcs_md.keys())}, "
-                    f"Available similarity functions: {', '.join(sim_funcs_md.keys())}"
-                )
+                valid_funcs = ", ".join(list(MULTI_SIMILARITY_FUNCTIONS.keys()) + list(MULTI_DISTANCE_FUNCTIONS.keys()))
+                raise ValueError(f"Invalid distance function '{activation_distance}'. Available options: {valid_funcs}")
         elif callable(activation_distance):
             self._activation_distance = activation_distance
 

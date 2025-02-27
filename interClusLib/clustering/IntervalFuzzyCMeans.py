@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from numpy.random import RandomState
 from warnings import warn
-from interClusLib.similarity_distance import IntervalMetrics
+from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
 
 class IntervalFuzzyCMeans:
     """
@@ -69,17 +69,14 @@ class IntervalFuzzyCMeans:
         self.k = None          # shape (n_clusters, n_dims) if adaptive_weights=True
         self.objective_ = None
 
-        sim_funcs = IntervalMetrics.get_similarity_funcs()
-        dis_funcs = IntervalMetrics.get_distance_funcs()
-
-        if distance_func in sim_funcs:
-            self.distance_function = sim_funcs[distance_func]
+        if distance_func in SIMILARITY_FUNCTIONS:
+            self.distance_function = SIMILARITY_FUNCTIONS[distance_func]
             self.isSim = True
-        elif distance_func in dis_funcs:
-            self.distance_function = dis_funcs[distance_func]
+        elif distance_func in DISTANCE_FUNCTIONS:
+            self.distance_function = DISTANCE_FUNCTIONS[distance_func]
             self.isSim = False
         else:
-            valid_funcs = ", ".join(list(sim_funcs.keys()) + list(dis_funcs.keys()))
+            valid_funcs = ", ".join(list(SIMILARITY_FUNCTIONS.keys()) + list(DISTANCE_FUNCTIONS.keys()))
             raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
 
     def _init_membership(self, n_samples):

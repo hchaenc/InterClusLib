@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from numpy.random import RandomState
 from warnings import warn
-from interClusLib.similarity_distance import IntervalMetrics
+from interClusLib.metric import MULTI_SIMILARITY_FUNCTIONS, MULTI_DISTANCE_FUNCTIONS
 import os
 
 class IntervalKMeans:
@@ -23,17 +23,14 @@ class IntervalKMeans:
         self.random_state = np.random.RandomState(random_state)
         self.train_data = None
 
-        sim_funcs_md = IntervalMetrics.get_similarity_funcs_md()
-        dis_funcs_md = IntervalMetrics.get_distance_funcs_md()
-
-        if distance_func in sim_funcs_md:
-            self.distance_function = sim_funcs_md[distance_func]
+        if distance_func in MULTI_SIMILARITY_FUNCTIONS:
+            self.distance_function = MULTI_SIMILARITY_FUNCTIONS[distance_func]
             self.isSim = True
-        elif distance_func in dis_funcs_md:
-            self.distance_function = dis_funcs_md[distance_func]
+        elif distance_func in MULTI_DISTANCE_FUNCTIONS:
+            self.distance_function = MULTI_DISTANCE_FUNCTIONS[distance_func]
             self.isSim = False
         else:
-            valid_funcs = ", ".join(list(sim_funcs_md.keys()) + list(dis_funcs_md.keys()))
+            valid_funcs = ", ".join(list(MULTI_SIMILARITY_FUNCTIONS.keys()) + list(MULTI_DISTANCE_FUNCTIONS.keys()))
             raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
 
     def _init_centroids(self, intervals):
