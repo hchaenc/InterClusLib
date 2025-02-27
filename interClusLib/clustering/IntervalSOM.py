@@ -571,6 +571,112 @@ class IntervalSOM:
         dist_mat = self._distance_from_weights(data)
         mins = np.min(dist_mat, axis=1)
         return np.mean(mins)
+    
+    def topographic_error(self, intervals):
+        """Returns the topographic error computed by finding
+        the best-matching and second-best-matching neuron in the map
+        for each input and then evaluating the positions.
+        
+        A sample for which these two nodes are not adjacent counts as
+        an error. The topographic error is given by the
+        the total number of errors divided by the total of samples.
+        
+        If the topographic error is 0, no error occurred.
+        If 1, the topology was not preserved for any of the samples.
+        
+        Parameters:
+        -----------
+        intervals : np.ndarray
+            Input interval data of shape (N, n_dims, 2)
+            
+        Returns:
+        --------
+        float
+            The topographic error value (between 0 and 1)
+        """
+        # Check input shape
+        n_samples, dims, two_ = intervals.shape
+        if dims != self.n_dims or two_ != 2:
+            raise ValueError(f"Data shape must be (N, {self.n_dims}, 2). Got {intervals.shape}.")
+        
+        # Check if map is too small for meaningful topographic error
+        total_neurons = self.x * self.y
+        if total_neurons == 1:
+            warn('The topographic error is not defined for a 1-by-1 map.')
+            return np.nan
+        
+        # Call the appropriate implementation based on topology
+        if self.topology == 'hexagonal':
+            return self._topographic_error_hexagonal(intervals)
+        else:
+            return self._topographic_error_rectangular(intervals)
+
+    def _topographic_error_hexagonal(self, intervals):
+        """Return the topographic error for hexagonal grid"""
+        # Get the distances from each sample to all neurons
+        dist_mat = self._distance_from_weights(intervals)
+        
+        # Get indices of the best 2 matching units for each sample
+        b2mu_inds = np.argsort(dist_mat, axis=1)[:, :2]
+        
+        # Convert flat indices to euclidean coordinates
+        b2mu_coords = []
+        for bmu in b2mu_inds:
+            # First BMU coordinates
+            bmu1_i, bmu1_j = bmu[0] // self.y, bmu[0] % self.y
+            # Apply hexagonal offset to even/odd rows
+            bmu1_y = bmu1_j + 0.5 if bmu1_i % 2 == 1 else bmu1_j
+            bmu1_coords = np.array([bmu1_i, bmu1_y])
+            
+            # Second BMU coordinates
+            bmu2_i, bmu2_j = bmu[1] // self.y, bmu[1] % self.y
+            # Apply hexagonal offset to even/odd rows
+            bmu2_y = bmu2_j + 0.5 if bmu2_i % 2 == 1 else bmu2_j
+            bmu2_coords = np.array([bmu2_i, bmu2_y])
+            
+            b2mu_coords.append([bmu1_coords, bmu2_coords])
+        
+        b2mu_coords = np.array(b2mu_coords)
+        
+        # Check if BMUs are neighbors (distance ≈ 1 in hexagonal grid)
+        b2mu_neighbors = [np.isclose(1.0, np.linalg.norm(bmu1 - bmu2))
+                        for bmu1, bmu2 in b2mu_coords]
+        
+        # Topographic error = 1 - proportion of neighboring BMUs
+        te = 1.0 - np.mean(b2mu_neighbors)
+        return te
+
+    def _topographic_error_rectangular(self, intervals):
+        """Return the topographic error for rectangular grid"""
+        t = 1.42  # Threshold for considering neurons as non-adjacent
+        
+        # Get the distances from each sample to all neurons
+        dist_mat = self._distance_from_weights(intervals)
+        
+        # Get indices of the best 2 matching units for each sample
+        b2mu_inds = np.argsort(dist_mat, axis=1)[:, :2]
+        
+        # Convert flat indices to grid coordinates
+        b2mu_i = np.zeros((len(intervals), 2), dtype=int)
+        b2mu_j = np.zeros((len(intervals), 2), dtype=int)
+        
+        for s in range(len(intervals)):
+            b2mu_i[s, 0] = b2mu_inds[s, 0] // self.y
+            b2mu_j[s, 0] = b2mu_inds[s, 0] % self.y
+            b2mu_i[s, 1] = b2mu_inds[s, 1] // self.y
+            b2mu_j[s, 1] = b2mu_inds[s, 1] % self.y
+        
+        # Calculate coordinate differences between first and second BMU
+        dxdy = np.hstack([
+            np.abs(b2mu_i[:, 0] - b2mu_i[:, 1]).reshape(-1, 1),
+            np.abs(b2mu_j[:, 0] - b2mu_j[:, 1]).reshape(-1, 1)
+        ])
+        
+        # Calculate Euclidean distance between BMUs
+        distance = np.linalg.norm(dxdy, axis=1)
+        
+        # Return proportion of samples where BMUs are not adjacent
+        return np.mean(distance > t)
 
     def get_prototypes(self):
         """
