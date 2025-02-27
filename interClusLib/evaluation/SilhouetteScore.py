@@ -48,7 +48,6 @@ def silhouette_score(data, labels, metric) -> float:
 
     n_samples = len(data)
 
-
     # If user gave us similarity, define a small wrapper
     def dist(a, b):
         val = distance_func(a, b)
