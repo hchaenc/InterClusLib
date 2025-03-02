@@ -369,4 +369,5 @@ class IntervalFuzzyCMeans:
         # np.argmax finds the index of the maximum value along axis=1 (row-wise),
         # assigning each sample to the cluster with the highest membership.
         crisp_labels = np.argmax(self.U, axis=1)
+        self.crisp_label = crisp_labels
         return crisp_labels

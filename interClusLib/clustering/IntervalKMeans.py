@@ -109,3 +109,8 @@ class IntervalKMeans:
         """
         predictions = self._assign_clusters(intervals, self.centroids_)
         return predictions
+
+    def get_labels(self):
+        if self.labels_ is None:
+            raise RuntimeError("Model not fitted yet.")
+        return self.labels_
