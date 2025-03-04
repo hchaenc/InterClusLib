@@ -4,7 +4,6 @@ from matplotlib.path import Path
 import matplotlib.patches as mpatches
 import matplotlib as mpl
 
-
 class IntervalParallelCoordinates:
 
     # Functions for generating Bezier curves
@@ -63,17 +62,19 @@ class IntervalParallelCoordinates:
         return (mid_x, mid_y), (cp1_x, cp1_y), (cp2_x, cp2_y), (cp3_x, cp3_y), (cp4_x, cp4_y)
 
     @staticmethod
-    def plot_interval_curves(data, feature_names=None, clusters=None, centroids=None, alpha=1/6, beta=0.8, ax=None, 
+    def plot_interval_curves(data=None, feature_names=None, clusters=None, centroids=None, alpha=1/6, beta=0.8, ax=None, 
                     use_bundling=True, use_color=True, uncertainty_alpha=0.2):
         """
         Plot parallel coordinates with curve bundling for interval data.
         
         Parameters:
         - data: interval data in format (n_samples, n_dim, 2), where the last dimension represents [lower, upper]
+               Can be None if only plotting centroids
         - feature_names: list of feature names, if None, will auto-generate names
         - clusters: cluster assignments, if None, all data will be treated as one cluster
         - centroids: custom centroids data in format (n_clusters, n_dim, 2) 
                     where the last dimension represents [lower, upper]
+                    Can be provided without data to only plot centroids
         - alpha: smoothness scale (0-0.25)
         - beta: bundling strength (0-1)
         - ax: matplotlib axis
@@ -83,9 +84,17 @@ class IntervalParallelCoordinates:
         """
         if ax is None:
             fig, ax = plt.subplots(figsize=(12, 8))
-
-        n_samples, n_features = data.shape[0], data.shape[1]
-
+            
+        # Ensure either data or centroids (or both) are provided
+        if data is None and centroids is None:
+            raise ValueError("Either data or centroids must be provided")
+            
+        # Determine the number of features from provided data or centroids
+        if data is not None:
+            n_samples, n_features = data.shape[0], data.shape[1]
+        else:  # Use centroids to determine n_features
+            n_features = centroids.shape[1]
+            n_samples = 0
         
         # If feature_names is None, auto-generate feature names
         if feature_names is None:
@@ -94,22 +103,37 @@ class IntervalParallelCoordinates:
         # Set up axes - dynamically adapt to number of dimensions
         axes_x = np.linspace(0, 1, n_features)
         
-        # Extract lower and upper bounds
-        data_lower = data[:, :, 0]
-        data_upper = data[:, :, 1]
-        data_center = (data_lower + data_upper) / 2
-        
-        # Normalize data
-        all_mins = np.min(data_lower, axis=0)
-        all_maxs = np.max(data_upper, axis=0)
+        # Extract data bounds for normalization
+        if data is not None:
+            # Extract lower and upper bounds
+            data_lower = data[:, :, 0]
+            data_upper = data[:, :, 1]
+            data_center = (data_lower + data_upper) / 2
+            
+            # Initial min/max from data
+            all_mins = np.min(data_lower, axis=0)
+            all_maxs = np.max(data_upper, axis=0)
+        else:
+            # Initialize with centroids if no data
+            all_mins = np.min(centroids[:, :, 0], axis=0)
+            all_maxs = np.max(centroids[:, :, 1], axis=0)
+            
+        # Update min/max with centroids if available
+        if centroids is not None and data is not None:
+            centroid_mins = np.min(centroids[:, :, 0], axis=0)
+            centroid_maxs = np.max(centroids[:, :, 1], axis=0)
+            all_mins = np.minimum(all_mins, centroid_mins)
+            all_maxs = np.maximum(all_maxs, centroid_maxs)
         
         # Handle potential division by zero
         range_values = all_maxs - all_mins
         range_values[range_values == 0] = 1  # Avoid division by zero
         
-        norm_data_lower = (data_lower - all_mins) / range_values
-        norm_data_upper = (data_upper - all_mins) / range_values
-        norm_data_center = (data_center - all_mins) / range_values
+        # Normalize data if present
+        if data is not None:
+            norm_data_lower = (data_lower - all_mins) / range_values
+            norm_data_upper = (data_upper - all_mins) / range_values
+            norm_data_center = (data_center - all_mins) / range_values
         
         # Draw the axes with better spacing
         for i, x in enumerate(axes_x):
@@ -139,11 +163,19 @@ class IntervalParallelCoordinates:
             ax.text(x, -0.07, min_format.format(min_val), ha='center', va='top', fontsize=9)
             ax.text(x, 1.0, max_format.format(max_val), ha='center', va='bottom', fontsize=9)
         
-        # Set up cluster colors
-        if clusters is None:
-            clusters = np.zeros(n_samples, dtype=int)
-        
-        n_clusters = len(np.unique(clusters))
+        # Set up cluster information
+        if data is not None:
+            if clusters is None:
+                clusters = np.zeros(n_samples, dtype=int)
+                
+            n_clusters = max(len(np.unique(clusters)), 1)
+        elif centroids is not None:
+            # If only centroids, set n_clusters based on centroids
+            n_clusters = centroids.shape[0]
+            # Create a dummy clusters array if data is None
+            clusters = np.array([]) if clusters is None else clusters
+            
+        # Generate color map
         colors = [plt.cm.get_cmap('tab10')(i/max(1, n_clusters-1)) for i in range(n_clusters)]
         
         # Process centroids if provided
@@ -162,36 +194,47 @@ class IntervalParallelCoordinates:
             norm_centroid_center = (centroid_center - all_mins) / range_values
         
         # Calculate bundling centroids for each segment between axes
+        bundling_centroids = []
         if use_bundling:
-            bundling_centroids = []
             for i in range(n_features - 1):
                 cluster_bundling_centroids = {}
-                for cluster_id in np.unique(clusters):
-                    cluster_mask = clusters == cluster_id
-                    
-                    # Skip clusters with no data points
-                    if not np.any(cluster_mask):
-                        continue
-                    
-                    lefts = np.column_stack([
-                        np.full(np.sum(cluster_mask), axes_x[i]), 
-                        norm_data_center[cluster_mask, i]
-                    ])
-                    rights = np.column_stack([
-                        np.full(np.sum(cluster_mask), axes_x[i+1]), 
-                        norm_data_center[cluster_mask, i+1]
-                    ])
-                    
-                    midpoints = []
-                    for j in range(lefts.shape[0]):
-                        mid_x = (lefts[j, 0] + rights[j, 0]) / 2
-                        mid_y = (lefts[j, 1] + rights[j, 1]) / 2
-                        midpoints.append((mid_x, mid_y))
-                    
-                    if midpoints:
-                        midpoints = np.array(midpoints)
-                        centroid = midpoints.mean(axis=0)
-                        cluster_bundling_centroids[cluster_id] = centroid
+                
+                # If data is available, use it to compute bundling centroids
+                if data is not None:
+                    for cluster_id in np.unique(clusters):
+                        cluster_mask = clusters == cluster_id
+                        
+                        # Skip clusters with no data points
+                        if not np.any(cluster_mask):
+                            continue
+                        
+                        lefts = np.column_stack([
+                            np.full(np.sum(cluster_mask), axes_x[i]), 
+                            norm_data_center[cluster_mask, i]
+                        ])
+                        rights = np.column_stack([
+                            np.full(np.sum(cluster_mask), axes_x[i+1]), 
+                            norm_data_center[cluster_mask, i+1]
+                        ])
+                        
+                        midpoints = []
+                        for j in range(lefts.shape[0]):
+                            mid_x = (lefts[j, 0] + rights[j, 0]) / 2
+                            mid_y = (lefts[j, 1] + rights[j, 1]) / 2
+                            midpoints.append((mid_x, mid_y))
+                        
+                        if midpoints:
+                            midpoints = np.array(midpoints)
+                            centroid = midpoints.mean(axis=0)
+                            cluster_bundling_centroids[cluster_id] = centroid
+                # If only centroids are available, use them for bundling centroids
+                elif centroids is not None:
+                    for cluster_id in range(n_clusters):
+                        p_left = np.array([axes_x[i], norm_centroid_center[cluster_id, i]])
+                        p_right = np.array([axes_x[i+1], norm_centroid_center[cluster_id, i+1]])
+                        mid_x = (p_left[0] + p_right[0]) / 2
+                        mid_y = (p_left[1] + p_right[1]) / 2
+                        cluster_bundling_centroids[cluster_id] = np.array([mid_x, mid_y])
                 
                 # Redistribute bundling centroids
                 if cluster_bundling_centroids:
@@ -203,124 +246,126 @@ class IntervalParallelCoordinates:
                 
                 bundling_centroids.append(cluster_bundling_centroids)
         
-        # Draw each line and its uncertainty region
-        for j in range(n_samples):
-            line_data_lower = norm_data_lower[j]
-            line_data_upper = norm_data_upper[j]
-            line_data_center = norm_data_center[j]
-            
-            points_lower = np.column_stack([axes_x, line_data_lower])
-            points_upper = np.column_stack([axes_x, line_data_upper])
-            points_center = np.column_stack([axes_x, line_data_center])
-            
-            if use_color:
-                line_color = colors[clusters[j]]
-            else:
-                line_color = 'steelblue'
-            
-            # For each pair of adjacent axes, draw curves
-            for i in range(n_features - 1):
-                if use_bundling:
-                    centroid = bundling_centroids[i].get(clusters[j], None)
+        # Draw data lines and uncertainty regions if data is provided
+        if data is not None:
+            for j in range(n_samples):
+                line_data_lower = norm_data_lower[j]
+                line_data_upper = norm_data_upper[j]
+                line_data_center = norm_data_center[j]
+                
+                points_lower = np.column_stack([axes_x, line_data_lower])
+                points_upper = np.column_stack([axes_x, line_data_upper])
+                points_center = np.column_stack([axes_x, line_data_center])
+                
+                if use_color:
+                    line_color = colors[clusters[j]]
                 else:
-                    centroid = None
+                    line_color = 'steelblue'
                 
-                # Center line control points
-                p_left_center = points_center[i]
-                p_right_center = points_center[i+1]
-                
-                (mid_x_center, mid_y_center), (cp1_x, cp1_y), (cp2_x, cp2_y), \
-                    (cp3_x, cp3_y), (cp4_x, cp4_y) = \
-                    IntervalParallelCoordinates.compute_control_points(p_left_center, p_right_center, alpha, beta, centroid)
-                
-                # Lower bound control points
-                p_left_lower = points_lower[i]
-                p_right_lower = points_lower[i+1]
-                
-                (mid_x_lower, mid_y_lower), (cp1_x_lower, cp1_y_lower), (cp2_x_lower, cp2_y_lower), \
-                    (cp3_x_lower, cp3_y_lower), (cp4_x_lower, cp4_y_lower) = \
-                    IntervalParallelCoordinates.compute_control_points(p_left_lower, p_right_lower, alpha, beta, centroid)
-                
-                # Upper bound control points
-                p_left_upper = points_upper[i]
-                p_right_upper = points_upper[i+1]
-                
-                (mid_x_upper, mid_y_upper), (cp1_x_upper, cp1_y_upper), (cp2_x_upper, cp2_y_upper), \
-                    (cp3_x_upper, cp3_y_upper), (cp4_x_upper, cp4_y_upper) = \
-                    IntervalParallelCoordinates.compute_control_points(p_left_upper, p_right_upper, alpha, beta, centroid)
-                
-                # Generate curves
-                # Center curve (left to mid)
-                curve1_center = IntervalParallelCoordinates.generate_bezier_curve(
-                    p_left_center, 
-                    np.array([cp1_x, cp1_y]), 
-                    np.array([cp2_x, cp2_y]), 
-                    np.array([mid_x_center, mid_y_center])
-                )
-                
-                # Center curve (mid to right)
-                curve2_center = IntervalParallelCoordinates.generate_bezier_curve(
-                    np.array([mid_x_center, mid_y_center]),
-                    np.array([cp3_x, cp3_y]),
-                    np.array([cp4_x, cp4_y]),
-                    p_right_center
-                )
-                
-                curve_center = np.vstack([curve1_center, curve2_center])
-                
-                # Lower bound curve (left to mid)
-                curve1_lower = IntervalParallelCoordinates.generate_bezier_curve(
-                    p_left_lower, 
-                    np.array([cp1_x_lower, cp1_y_lower]), 
-                    np.array([cp2_x_lower, cp2_y_lower]), 
-                    np.array([mid_x_lower, mid_y_lower])
-                )
-                
-                # Lower bound curve (mid to right)
-                curve2_lower = IntervalParallelCoordinates.generate_bezier_curve(
-                    np.array([mid_x_lower, mid_y_lower]),
-                    np.array([cp3_x_lower, cp3_y_lower]),
-                    np.array([cp4_x_lower, cp4_y_lower]),
-                    p_right_lower
-                )
-                
-                curve_lower = np.vstack([curve1_lower, curve2_lower])
-                
-                # Upper bound curve (left to mid)
-                curve1_upper = IntervalParallelCoordinates.generate_bezier_curve(
-                    p_left_upper, 
-                    np.array([cp1_x_upper, cp1_y_upper]), 
-                    np.array([cp2_x_upper, cp2_y_upper]), 
-                    np.array([mid_x_upper, mid_y_upper])
-                )
-                
-                # Upper bound curve (mid to right)
-                curve2_upper = IntervalParallelCoordinates.generate_bezier_curve(
-                    np.array([mid_x_upper, mid_y_upper]),
-                    np.array([cp3_x_upper, cp3_y_upper]),
-                    np.array([cp4_x_upper, cp4_y_upper]),
-                    p_right_upper
-                )
-                
-                curve_upper = np.vstack([curve1_upper, curve2_upper])
-                
-                # Draw uncertainty region
-                verts = np.vstack([curve_lower, curve_upper[::-1]])
-                poly = mpatches.Polygon(verts, closed=True, facecolor=line_color, alpha=uncertainty_alpha)
-                ax.add_patch(poly)
-                
-                # Draw center line
-                ax.plot(curve_center[:, 0], curve_center[:, 1], color=line_color, alpha=0.7, linewidth=1)
+                # For each pair of adjacent axes, draw curves
+                for i in range(n_features - 1):
+                    if use_bundling and i < len(bundling_centroids):
+                        centroid = bundling_centroids[i].get(clusters[j], None)
+                    else:
+                        centroid = None
+                    
+                    # Center line control points
+                    p_left_center = points_center[i]
+                    p_right_center = points_center[i+1]
+                    
+                    (mid_x_center, mid_y_center), (cp1_x, cp1_y), (cp2_x, cp2_y), \
+                        (cp3_x, cp3_y), (cp4_x, cp4_y) = \
+                        IntervalParallelCoordinates.compute_control_points(p_left_center, p_right_center, alpha, beta, centroid)
+                    
+                    # Lower bound control points
+                    p_left_lower = points_lower[i]
+                    p_right_lower = points_lower[i+1]
+                    
+                    (mid_x_lower, mid_y_lower), (cp1_x_lower, cp1_y_lower), (cp2_x_lower, cp2_y_lower), \
+                        (cp3_x_lower, cp3_y_lower), (cp4_x_lower, cp4_y_lower) = \
+                        IntervalParallelCoordinates.compute_control_points(p_left_lower, p_right_lower, alpha, beta, centroid)
+                    
+                    # Upper bound control points
+                    p_left_upper = points_upper[i]
+                    p_right_upper = points_upper[i+1]
+                    
+                    (mid_x_upper, mid_y_upper), (cp1_x_upper, cp1_y_upper), (cp2_x_upper, cp2_y_upper), \
+                        (cp3_x_upper, cp3_y_upper), (cp4_x_upper, cp4_y_upper) = \
+                        IntervalParallelCoordinates.compute_control_points(p_left_upper, p_right_upper, alpha, beta, centroid)
+                    
+                    # Generate curves
+                    # Center curve (left to mid)
+                    curve1_center = IntervalParallelCoordinates.generate_bezier_curve(
+                        p_left_center, 
+                        np.array([cp1_x, cp1_y]), 
+                        np.array([cp2_x, cp2_y]), 
+                        np.array([mid_x_center, mid_y_center])
+                    )
+                    
+                    # Center curve (mid to right)
+                    curve2_center = IntervalParallelCoordinates.generate_bezier_curve(
+                        np.array([mid_x_center, mid_y_center]),
+                        np.array([cp3_x, cp3_y]),
+                        np.array([cp4_x, cp4_y]),
+                        p_right_center
+                    )
+                    
+                    curve_center = np.vstack([curve1_center, curve2_center])
+                    
+                    # Lower bound curve (left to mid)
+                    curve1_lower = IntervalParallelCoordinates.generate_bezier_curve(
+                        p_left_lower, 
+                        np.array([cp1_x_lower, cp1_y_lower]), 
+                        np.array([cp2_x_lower, cp2_y_lower]), 
+                        np.array([mid_x_lower, mid_y_lower])
+                    )
+                    
+                    # Lower bound curve (mid to right)
+                    curve2_lower = IntervalParallelCoordinates.generate_bezier_curve(
+                        np.array([mid_x_lower, mid_y_lower]),
+                        np.array([cp3_x_lower, cp3_y_lower]),
+                        np.array([cp4_x_lower, cp4_y_lower]),
+                        p_right_lower
+                    )
+                    
+                    curve_lower = np.vstack([curve1_lower, curve2_lower])
+                    
+                    # Upper bound curve (left to mid)
+                    curve1_upper = IntervalParallelCoordinates.generate_bezier_curve(
+                        p_left_upper, 
+                        np.array([cp1_x_upper, cp1_y_upper]), 
+                        np.array([cp2_x_upper, cp2_y_upper]), 
+                        np.array([mid_x_upper, mid_y_upper])
+                    )
+                    
+                    # Upper bound curve (mid to right)
+                    curve2_upper = IntervalParallelCoordinates.generate_bezier_curve(
+                        np.array([mid_x_upper, mid_y_upper]),
+                        np.array([cp3_x_upper, cp3_y_upper]),
+                        np.array([cp4_x_upper, cp4_y_upper]),
+                        p_right_upper
+                    )
+                    
+                    curve_upper = np.vstack([curve1_upper, curve2_upper])
+                    
+                    # Draw uncertainty region
+                    verts = np.vstack([curve_lower, curve_upper[::-1]])
+                    poly = mpatches.Polygon(verts, closed=True, facecolor=line_color, alpha=uncertainty_alpha)
+                    ax.add_patch(poly)
+                    
+                    # Draw center line
+                    ax.plot(curve_center[:, 0], curve_center[:, 1], color=line_color, alpha=0.7, linewidth=1)
         
         # Draw centroids if provided
         if centroids is not None:
-            for i, cluster_id in enumerate(np.unique(clusters)):
-                # Only draw if this cluster has data points
-                if np.sum(clusters == cluster_id) == 0:
+            for i in range(n_clusters):
+                # Skip this centroid if it corresponds to a cluster with no data points
+                # (only matters when both data and centroids are provided)
+                if data is not None and np.sum(clusters == i) == 0:
                     continue
                 
                 # Use a darker, more saturated version of the cluster color
-                base_color = np.array(colors[cluster_id])
+                base_color = np.array(colors[i])
                 # Make color darker for centroid
                 dark_color = np.clip(base_color * 0.7, 0, 1)
                 dark_color[3] = 1.0  # Full opacity
@@ -338,7 +383,7 @@ class IntervalParallelCoordinates:
                     # Get centroid point for bundling
                     bundle_centroid = None
                     if use_bundling and j < len(bundling_centroids):
-                        bundle_centroid = bundling_centroids[j].get(cluster_id, None)
+                        bundle_centroid = bundling_centroids[j].get(i, None)
                     
                     # Calculate control points
                     (mid_x_center, mid_y_center), (cp1_x, cp1_y), (cp2_x, cp2_y), \
@@ -431,10 +476,11 @@ class IntervalParallelCoordinates:
         if use_color and n_clusters > 1:
             handles = []
             for i in range(n_clusters):
-                # Create entries for regular cluster lines
-                handles.append(plt.Line2D([0], [0], color=colors[i], lw=2, label=f'Cluster {i+1}'))
+                # Create entries for regular cluster lines - only if data is provided or requested
+                if data is not None:
+                    handles.append(plt.Line2D([0], [0], color=colors[i], lw=2, label=f'Cluster {i+1}'))
                 
-                # If centroids are provided, add entries for centroids too
+                # If centroids are provided, add entries for centroids
                 if centroids is not None:
                     dark_color = np.clip(np.array(colors[i]) * 0.7, 0, 1)
                     dark_color[3] = 1.0
@@ -443,8 +489,9 @@ class IntervalParallelCoordinates:
                                            markeredgewidth=0.8,
                                            label=f'Centroid {i+1}'))
             
-            ax.legend(handles=handles, loc='upper right', frameon=True, 
-                     fontsize=9, framealpha=0.7)
+            if handles:  # Only add legend if we have entries
+                ax.legend(handles=handles, loc='upper right', frameon=True, 
+                         fontsize=9, framealpha=0.7)
         
         # Apply tight layout
         plt.tight_layout()
