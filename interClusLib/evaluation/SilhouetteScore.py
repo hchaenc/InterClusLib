@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
 
-def silhouette_score(data, labels, centers ,metric) -> float:
+def silhouette_score(data, labels , metric, centers = None) -> float:
     """
     Computes the silhouette score for a given clustering solution.
 

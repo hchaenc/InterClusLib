@@ -49,9 +49,49 @@ class IntervalAgglomerativeClustering:
             )
         return dist_matrix
 
+    def _compute_centroids(self, intervals, labels, n_clusters):
+        """
+        Compute the centroids for each cluster
+        
+        Parameters:
+        -----------
+        intervals : numpy.ndarray
+            Interval data with shape (n_samples, n_dims, 2)
+        labels : numpy.ndarray
+            Cluster labels with shape (n_samples,)
+        n_clusters : int
+            Number of clusters
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Cluster centroids with shape (n_clusters, n_dims, 2)
+        """
+        centroids = []
+        for cluster_id in range(n_clusters):
+            cluster_indices = np.where(labels == cluster_id)[0]
+            if len(cluster_indices) > 0:
+                cluster_data = intervals[cluster_indices]
+                # Calculate the mean of intervals for each dimension
+                center = np.mean(cluster_data, axis=0)
+                centroids.append(center)
+            else:
+                # Handle the case when no points are assigned to this cluster
+                print(f"Warning: Cluster {cluster_id} is empty.")
+                # Create a zero array with matching shape as centroid
+                center = np.zeros((intervals.shape[1], 2))
+                centroids.append(center)
+        
+        return np.array(centroids)
+
     def fit(self, intervals):
         """
-        :param intervals: shape (n_samples, n_dims, 2)
+        Fit the hierarchical clustering model to the interval data
+        
+        Parameters:
+        -----------
+        intervals: shape (n_samples, n_dims, 2)
+            Interval data to cluster
         """
         dist_matrix = self.compute_distance_matrix(intervals)
 
@@ -65,6 +105,9 @@ class IntervalAgglomerativeClustering:
 
         self.labels_ = self.model_.labels_
         self.train_data = intervals
+        
+        # Calculate and store cluster centroids
+        self.centroids_ = self._compute_centroids(intervals, self.labels_, self.n_clusters)
 
     def get_labels(self):
         if self.labels_ is None:
@@ -146,3 +189,78 @@ class IntervalAgglomerativeClustering:
             predictions.append(closest_center)
         
         return np.array(predictions)
+
+    def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
+                       metrics=['distortion'], distance_func=None, 
+                       linkage=None):
+        """
+        Compute evaluation metrics for a range of cluster numbers for hierarchical clustering.
+        
+        Parameters:
+        -----------
+        intervals : array-like
+            Interval data with shape (n_samples, n_dims, 2)
+        min_clusters : int, default=2
+            Minimum number of clusters to evaluate
+        max_clusters : int, default=10
+            Maximum number of clusters to evaluate
+        metrics : list of str, default=['distortion']
+            Metrics to compute, can be any key from the EVALUATION dictionary
+        distance_func : str, default=None
+            Distance function name. If None, uses the current instance's distance function.
+        linkage : str, default=None
+            Linkage criterion. If None, uses the current instance's linkage.
+        random_state : int, default=None
+            Random seed (not used in hierarchical clustering but kept for API consistency).
+        
+        Returns:
+        --------
+        dict
+            Dictionary where keys are metric names and values are dictionaries 
+            mapping k values to metric results
+        """
+        from interClusLib.evaluation import EVALUATION
+        
+        # Check if requested metrics are valid
+        for metric in metrics:
+            if metric not in EVALUATION:
+                raise ValueError(f"Unknown metric: {metric}. Available options: {list(EVALUATION.keys())}")
+        
+        # Use current instance parameters if not specified
+        distance_func = distance_func or self.distance_func
+        linkage = linkage or self.linkage
+        
+        # Initialize results dictionary
+        results = {metric: {} for metric in metrics}
+        
+        # Compute metrics for each k value
+        for k in range(min_clusters, max_clusters + 1):
+            try:
+                model = self.__class__(
+                    n_clusters=k,
+                    linkage=linkage,
+                    distance_func=distance_func
+                )
+                model.fit(intervals)
+                
+                # Calculate all requested metrics
+                for metric in metrics:
+                    try:
+                        metric_func = EVALUATION[metric]
+                        
+                        # Use the pre-computed centroids from the model
+                        centers = model.centroids_
+                        
+                        metric_value = metric_func(
+                            data=intervals,
+                            labels=model.labels_,
+                            centers=centers,
+                            metric=distance_func
+                        )
+                        results[metric][k] = metric_value
+                    except Exception as e:
+                        print(f"Error calculating {metric} for k={k}: {e}")
+            except Exception as e:
+                print(f"Error fitting model with k={k}: {e}")
+        
+        return results

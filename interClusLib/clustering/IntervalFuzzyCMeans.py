@@ -116,6 +116,14 @@ class IntervalFuzzyCMeans:
 
         self.centers_a = centers_a
         self.centers_b = centers_b
+    
+    def _convert_centers_to_intervals(self):
+        """
+        Convert separate lower and upper bounds (centers_a, centers_b) to interval format.
+        """
+        # Stack centers_a and centers_b along a new last dimension
+        # Shape: (n_clusters, n_dims, 2)
+        return np.stack([self.centers_a, self.centers_b], axis=2)
 
     def _compute_distance(self, x_k, c_i):
         """
@@ -306,6 +314,7 @@ class IntervalFuzzyCMeans:
             prev_U = self.U.copy()
 
         self.objective_ = obj
+        self.centroids_ = self._convert_centers_to_intervals()
         return self
 
     def predict(self, intervals):
@@ -371,3 +380,116 @@ class IntervalFuzzyCMeans:
         crisp_labels = np.argmax(self.U, axis=1)
         self.crisp_label = crisp_labels
         return crisp_labels
+    
+    def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
+                           metrics=['distortion'], distance_func=None, 
+                           m=None, max_iter=None, tol=None, 
+                           adaptive_weights=None, random_state=None, 
+                           n_init=1):
+        """
+        Compute evaluation metrics for a range of cluster numbers for fuzzy clustering.
+        
+        Parameters:
+        -----------
+        intervals : array-like
+            Interval data with shape (n_samples, n_dims, 2)
+        min_clusters : int, default=2
+            Minimum number of clusters to evaluate
+        max_clusters : int, default=10
+            Maximum number of clusters to evaluate
+        metrics : list of str, default=['distortion']
+            Metrics to compute, can be any key from the EVALUATION dictionary
+        distance_func : str or callable, default=None
+            Distance function name or callable. If None, uses the current instance's distance function.
+        m : float, default=None
+            Fuzzifier parameter. If None, uses the current instance's value.
+        max_iter : int, default=None
+            Maximum number of iterations. If None, uses the current instance's value.
+        tol : float, default=None
+            Convergence tolerance. If None, uses the current instance's value.
+        adaptive_weights : bool, default=None
+            Whether to use adaptive weights. If None, uses the current instance's value.
+        random_state : int, default=None
+            Random seed. If provided, it will be used to set numpy's random state.
+        n_init : int, default=1
+            Number of times to run the algorithm with different initializations.
+        
+        Returns:
+        --------
+        dict
+            Dictionary where keys are metric names and values are dictionaries 
+            mapping k values to metric results
+        """
+        from interClusLib.evaluation import EVALUATION
+        
+        # Check if requested metrics are valid
+        for metric in metrics:
+            if metric not in EVALUATION:
+                raise ValueError(f"Unknown metric: {metric}. Available options: {list(EVALUATION.keys())}")
+        
+        # Use current instance parameters if not specified
+        distance_func = distance_func or self.distance_function.__name__ if hasattr(self.distance_function, '__name__') else self.distance_func_name if hasattr(self, 'distance_func_name') else 'euclidean'
+        m = m or self.m
+        max_iter = max_iter or self.max_iter
+        tol = tol or self.tol
+        adaptive_weights = adaptive_weights if adaptive_weights is not None else self.adaptive_weights
+        
+        # Set random seed if provided
+        if random_state is not None:
+            np.random.seed(random_state)
+        
+        # Initialize results dictionary
+        results = {metric: {} for metric in metrics}
+        
+        # Compute metrics for each k value
+        for k in range(min_clusters, max_clusters + 1):
+            best_objective = float('inf')
+            best_model = None
+            
+            # Run multiple initializations
+            for init in range(n_init):
+                try:
+                    # Create a new model instance with the current k
+                    model = self.__class__(
+                        n_clusters=k,
+                        m=m,
+                        max_iter=max_iter,
+                        tol=tol,
+                        adaptive_weights=adaptive_weights,
+                        distance_func=distance_func
+                    )
+                    
+                    # Fit the model
+                    model.fit(intervals)
+                    
+                    # Keep track of the best model based on objective function
+                    objective = model.get_objective()
+                    if objective < best_objective:
+                        best_objective = objective
+                        best_model = model
+                        
+                except Exception as e:
+                    print(f"Error fitting model with k={k}, initialization {init}: {e}")
+            
+            if best_model is None:
+                print(f"Failed to fit model for k={k}, skipping")
+                continue
+                
+            # Get crisp assignments for evaluation metrics
+            labels = best_model.get_crisp_assignments()
+            
+            # Calculate all requested metrics
+            for metric in metrics:
+                try:
+                    metric_func = EVALUATION[metric]
+                    metric_value = metric_func(
+                        data=intervals,
+                        labels=labels,
+                        centers=best_model.centroids_,  # Use pre-computed centroids
+                        metric=distance_func
+                    )
+                    results[metric][k] = metric_value
+                except Exception as e:
+                    print(f"Error calculating {metric} for k={k}: {e}")
+        
+        return results
