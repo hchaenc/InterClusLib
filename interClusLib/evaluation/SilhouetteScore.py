@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import defaultdict
-from interClusLib.metric import MULTI_SIMILARITY_FUNCTIONS, MULTI_DISTANCE_FUNCTIONS
+from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
 
 def silhouette_score(data, labels, metric) -> float:
     """
@@ -36,15 +36,15 @@ def silhouette_score(data, labels, metric) -> float:
     if len(data) != len(labels):
         raise ValueError("data and labels must have the same length.")
 
-    if metric in MULTI_SIMILARITY_FUNCTIONS:
-        distance_func = MULTI_SIMILARITY_FUNCTIONS[metric]
+    if metric in SIMILARITY_FUNCTIONS:
+        distance_func = SIMILARITY_FUNCTIONS[metric]
         is_sim = True
-    elif metric in MULTI_DISTANCE_FUNCTIONS:
-        distance_func = MULTI_DISTANCE_FUNCTIONS[metric]
+    elif metric in DISTANCE_FUNCTIONS:
+        distance_func = DISTANCE_FUNCTIONS[metric]
         is_sim = False
     else:
-        valid_metric = ", ".join(list(MULTI_SIMILARITY_FUNCTIONS.keys()) + list(MULTI_DISTANCE_FUNCTIONS.keys()))
-        raise ValueError(f"Invalid metric '{metric}'. Available options: {metric}")
+        valid_metric = ", ".join(list(SIMILARITY_FUNCTIONS.keys()) + list(DISTANCE_FUNCTIONS.keys()))
+        raise ValueError(f"Invalid metric '{metric}'. Available options: {valid_metric}")
 
     n_samples = len(data)
 

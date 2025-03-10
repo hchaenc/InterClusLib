@@ -5,7 +5,7 @@ from math import sqrt
 from numpy.random import RandomState
 from warnings import warn
 from sklearn.decomposition import PCA
-from interClusLib.metric import MULTI_SIMILARITY_FUNCTIONS, MULTI_DISTANCE_FUNCTIONS
+from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
 from collections import defaultdict
 import os
 
@@ -165,14 +165,14 @@ class IntervalSOM:
 
         # Validate and assign the activation distance function
         if isinstance(activation_distance, str):
-            if activation_distance in MULTI_SIMILARITY_FUNCTIONS:
-                self._activation_distance = MULTI_SIMILARITY_FUNCTIONS[activation_distance]
+            if activation_distance in SIMILARITY_FUNCTIONS:
+                self._activation_distance = SIMILARITY_FUNCTIONS[activation_distance]
                 self.isSim = True
-            elif activation_distance in MULTI_DISTANCE_FUNCTIONS:
-                self._activation_distance = MULTI_DISTANCE_FUNCTIONS[activation_distance]
+            elif activation_distance in DISTANCE_FUNCTIONS:
+                self._activation_distance = DISTANCE_FUNCTIONS[activation_distance]
                 self.isSim = False
             else:
-                valid_funcs = ", ".join(list(MULTI_SIMILARITY_FUNCTIONS.keys()) + list(MULTI_DISTANCE_FUNCTIONS.keys()))
+                valid_funcs = ", ".join(list(SIMILARITY_FUNCTIONS.keys()) + list(DISTANCE_FUNCTIONS.keys()))
                 raise ValueError(f"Invalid distance function '{activation_distance}'. Available options: {valid_funcs}")
         elif callable(activation_distance):
             self._activation_distance = activation_distance

@@ -1,6 +1,6 @@
 from collections import defaultdict
 import numpy as np
-from interClusLib.metric import MULTI_SIMILARITY_FUNCTIONS, MULTI_DISTANCE_FUNCTIONS
+from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
 
 def davies_bouldin_index(
         data: np.ndarray,
@@ -40,14 +40,14 @@ def davies_bouldin_index(
     dbi = Evaluation.davies_bouldin_index(data, labels, kmeans.centroids_, my_hausdorff)
     print("Davies-Bouldin =", dbi)
     """
-    if metric in MULTI_SIMILARITY_FUNCTIONS:
-        distance_func = MULTI_SIMILARITY_FUNCTIONS[metric]
+    if metric in SIMILARITY_FUNCTIONS:
+        distance_func = SIMILARITY_FUNCTIONS[metric]
         is_sim = True
-    elif metric in MULTI_DISTANCE_FUNCTIONS:
-        distance_func = MULTI_DISTANCE_FUNCTIONS[metric]
+    elif metric in DISTANCE_FUNCTIONS:
+        distance_func = DISTANCE_FUNCTIONS[metric]
         is_sim = False
     else:
-        valid_metric = ", ".join(list(MULTI_SIMILARITY_FUNCTIONS.keys()) + list(MULTI_DISTANCE_FUNCTIONS.keys()))
+        valid_metric = ", ".join(list(SIMILARITY_FUNCTIONS.keys()) + list(DISTANCE_FUNCTIONS.keys()))
         raise ValueError(f"Invalid metric '{metric}'. Available options: {metric}")
 
     # 1) cluster_map => which samples in each cluster

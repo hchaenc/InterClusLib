@@ -95,6 +95,113 @@ class IntervalData:
             data[f"feature_{i+1}_upper"] = interval_end[:, i]
 
         return cls(pd.DataFrame(data))
+        
+    @classmethod
+    def make_interval_blobs(cls,
+                     n_samples=1000,
+                     n_clusters=3,
+                     n_dims=2,
+                     cluster_centers=None,
+                     cluster_std_center=1.0,
+                     cluster_std_width=0.5,
+                     center_range=(-10, 10),    # 新参数：控制中心点的随机范围
+                     width_range=(0.1, 2.0),    # 新参数：控制宽度的随机范围
+                     min_width=0.05,            # 新参数：最小宽度限制
+                     shuffle=True,
+                     random_state=None):
+        """
+        Generate synthetic interval data with cluster structure, similarly to random_data, but 
+        arranged so that each sample belongs to one of several 'interval clusters'.
+
+        :param n_samples: int or list of int (if list => number of samples per cluster)
+        :param n_clusters: number of clusters
+        :param n_dims: number of features => shape (n_dims,2)
+        :param cluster_centers: None or array (n_clusters, n_dims,2)
+        :param cluster_std_center: float or array-like controlling intervals' midpoint variation
+        :param cluster_std_width: float or array-like controlling intervals' width variation
+        :param center_range: tuple (min, max) for random center generation range
+        :param width_range: tuple (min, max) for random width generation range
+        :param min_width: minimum interval width (prevents negative or very small widths)
+        :param shuffle: bool, shuffle the samples
+        :param random_state: for reproducibility
+        :return: an IntervalData object with columns [feature_1_lower, feature_1_upper, ...]
+        """
+        
+        rng = np.random.default_rng(random_state)
+
+        # 1) distribute n_samples among clusters
+        if isinstance(n_samples, int):
+            samples_per_cluster = [n_samples // n_clusters]*n_clusters
+            remainder = n_samples % n_clusters
+            for i in range(remainder):
+                samples_per_cluster[i]+=1
+        else:
+            samples_per_cluster = n_samples
+            n_clusters = len(samples_per_cluster)
+
+        total_samples = sum(samples_per_cluster)
+
+        # 2) create or use given cluster_centers => shape(n_clusters, n_dims, 2)
+        if cluster_centers is None:
+            # random centers with user-defined ranges
+            cluster_centers = []
+            for k in range(n_clusters):
+                midpoint = rng.uniform(center_range[0], center_range[1], size=n_dims)
+                half_width = rng.uniform(width_range[0], width_range[1], size=n_dims)
+                lower = midpoint - half_width
+                upper = midpoint + half_width
+                cluster_centers.append(np.stack([lower, upper], axis=-1))
+            cluster_centers = np.array(cluster_centers)
+        else:
+            cluster_centers = np.array(cluster_centers)
+            # optionally check shape?
+
+        cluster_std_center = np.array(cluster_std_center, ndmin=1)
+        if cluster_std_center.size==1:
+            cluster_std_center = np.full(n_dims, cluster_std_center[0])
+
+        cluster_std_width = np.array(cluster_std_width, ndmin=1)
+        if cluster_std_width.size==1:
+            cluster_std_width = np.full(n_dims, cluster_std_width[0])
+
+        intervals = np.zeros((total_samples, n_dims, 2), dtype=float)
+
+        # 3) generate data
+        current_idx=0
+        for c_idx in range(n_clusters):
+            n_k = samples_per_cluster[c_idx]
+            c_center = cluster_centers[c_idx]  # shape (n_dims,2)
+
+            # cluster midpoint / halfwidth
+            midpoint = 0.5*(c_center[...,0] + c_center[...,1])
+            halfw   = 0.5*(c_center[...,1] - c_center[...,0])
+
+            # offset
+            offset_mid = rng.normal(0, cluster_std_center, size=(n_k,n_dims))
+            offset_hw  = rng.normal(0, cluster_std_width,  size=(n_k,n_dims))
+
+            final_mid  = midpoint + offset_mid
+            final_hw   = halfw + offset_hw
+            final_hw[final_hw < min_width] = min_width  # 使用用户定义的最小宽度
+
+            a = final_mid - final_hw
+            b = final_mid + final_hw
+
+            intervals[current_idx:current_idx+n_k] = np.stack([a,b], axis=-1)
+            current_idx+=n_k
+
+        if shuffle:
+            perm = rng.permutation(total_samples)
+            intervals = intervals[perm]
+
+        # 4) build the DataFrame
+        df_data = {}
+        for i in range(n_dims):
+            df_data[f"feature_{i+1}_lower"] = intervals[:, i, 0]
+            df_data[f"feature_{i+1}_upper"] = intervals[:, i, 1]
+
+        df = pd.DataFrame(df_data)
+        return cls(df)
 
     def get_intervals(self):
         """ Returns interval data as a NumPy array in the shape [n_samples, n_intervals, 2] """

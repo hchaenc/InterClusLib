@@ -14,6 +14,7 @@ class IntervalRadarChart:
                    title=None, title_fontsize=16, title_pad=35, show_outer_circle=False):
         """
         Plot radar chart for interval data with straight lines using original data values.
+        Supports negative values in interval bounds.
         """
         if ax is None:
             fig = plt.figure(figsize=(12, 12))
@@ -84,29 +85,69 @@ class IntervalRadarChart:
         # Remove the default circle border if requested
         ax.spines['polar'].set_visible(show_outer_circle)
         
+        # Find the global min and max across all features
+        global_min = np.min(all_mins)
+        global_max = np.max(all_maxs)
+        
+        # Calculate the radius range to accommodate negative values
+        radius_range = global_max - global_min
+        # Add a small buffer (10%) to both ends
+        buffer = radius_range * 0.1
+        r_min = global_min - buffer
+        r_max = global_max + buffer
+        
+        # Set radius offset to handle negative values
+        # This is the key modification - we'll shift all values by this offset
+        radius_offset = 0
+        if global_min < 0:
+            radius_offset = -global_min + buffer
+        
         # Set up grid
         if draw_grid:
-            # Calculate max radius for all features
-            max_radius = np.max(all_maxs) * 1.1
-            
-            # Draw complete circular grid lines
+            # Calculate levels for grid lines
             grid_levels = 5
-            grid_radii = np.linspace(0, max_radius, grid_levels+1)[1:]
             
-            for radius in grid_radii:
+            # Create grid levels that include both negative and positive values
+            if global_min < 0 and global_max > 0:
+                # Calculate reasonable grid steps
+                total_range = r_max - r_min
+                grid_step = total_range / grid_levels
+                
+                # Create grid values centered around zero if possible
+                neg_levels = int(np.ceil(abs(r_min) / grid_step))
+                pos_levels = int(np.ceil(r_max / grid_step))
+                
+                # Generate grid values
+                grid_values = []
+                for i in range(-neg_levels, pos_levels + 1):
+                    val = i * grid_step
+                    if r_min <= val <= r_max:
+                        grid_values.append(val)
+                
+                # Convert to radii for plotting (shift by offset)
+                grid_radii = [val + radius_offset for val in grid_values]
+            else:
+                # If all values are negative or all positive, use regular spacing
+                grid_radii = np.linspace(r_min + radius_offset, r_max + radius_offset, grid_levels + 1)[1:]
+                grid_values = np.linspace(r_min, r_max, grid_levels + 1)[1:]
+            
+            # Draw circular grid lines
+            for i, radius in enumerate(grid_radii):
                 # Draw a complete circle for each grid level
                 circle = plt.Circle((0, 0), radius, transform=ax.transData._b, 
                                  fill=False, edgecolor=grid_color, alpha=0.15,
                                  linestyle='-', linewidth=0.7)
                 ax.add_patch(circle)
                 
-                # Add labels for grid levels at each axis
-                label_value = radius
-                if label_value >= 1000:
+                # Add labels with the actual value (not the shifted radius)
+                label_value = grid_values[i]
+                
+                # Format label based on magnitude
+                if abs(label_value) >= 1000:
                     label = f"{label_value/1000:.0f}k"
-                elif label_value >= 100:
+                elif abs(label_value) >= 100:
                     label = f"{label_value:.0f}"
-                elif label_value >= 10:
+                elif abs(label_value) >= 10:
                     label = f"{label_value:.1f}"
                 else:
                     label = f"{label_value:.2f}"
@@ -117,15 +158,15 @@ class IntervalRadarChart:
             
             # Draw radial lines for each feature
             for i in range(n_features):
-                # Draw radial lines from center to max radius
-                ax.plot([angles[i], angles[i]], [0, max_radius], 
+                # Draw radial lines from min radius to max radius
+                ax.plot([angles[i], angles[i]], [r_min + radius_offset, r_max + radius_offset], 
                      color=grid_color, alpha=0.25, linestyle='-', linewidth=0.8)
                 
-                # Improved label positioning - move closer to the chart
+                # Improved label positioning
                 if draw_labels:
                     angle_rad = angles[i]
-                    # Set label distance closer to the maximum data points
-                    label_distance = max_radius * 1.08  # Reduced from 1.25 to 1.08
+                    # Set label distance slightly beyond the maximum radius
+                    label_distance = r_max + radius_offset + buffer * 0.5
                     
                     # Calculate text alignment based on angle
                     if 0 <= angle_rad < np.pi/4 or 7*np.pi/4 <= angle_rad <= 2*np.pi:
@@ -137,12 +178,12 @@ class IntervalRadarChart:
                     else:
                         ha, va = 'center', 'top'
                     
-                    # Place label at the angle with enhanced visibility but without background box
+                    # Place label at the angle with enhanced visibility
                     ax.text(angle_rad, label_distance, feature_names[i], 
                          color=label_color, fontsize=label_fontsize, fontweight='bold',
                          horizontalalignment=ha, verticalalignment=va)
         
-        # Draw data samples
+        # Draw data samples with offset for negative values
         if data is not None:
             # For each cluster, select a limited number of samples to display
             for cluster_id in range(n_clusters):
@@ -154,10 +195,15 @@ class IntervalRadarChart:
                     cluster_indices = np.random.choice(cluster_indices, max_samples_per_cluster, replace=False)
                 
                 for j in cluster_indices:
+                    # Apply offset to handle negative values
+                    offsetted_lower = data_lower[j] + radius_offset
+                    offsetted_upper = data_upper[j] + radius_offset
+                    offsetted_center = data_center[j] + radius_offset
+                    
                     # Close the loop for each sample
-                    line_data_lower = np.append(data_lower[j], data_lower[j, 0])
-                    line_data_upper = np.append(data_upper[j], data_upper[j, 0])
-                    line_data_center = np.append(data_center[j], data_center[j, 0])
+                    line_data_lower = np.append(offsetted_lower, offsetted_lower[0])
+                    line_data_upper = np.append(offsetted_upper, offsetted_upper[0])
+                    line_data_center = np.append(offsetted_center, offsetted_center[0])
                     
                     # Get color for this cluster
                     line_color = cluster_colors[cluster_id]
@@ -183,14 +229,19 @@ class IntervalRadarChart:
                 if data is not None and np.sum(clusters == i) == 0:
                     continue
                 
+                # Apply offset to handle negative values
+                offsetted_lower = centroid_lower[i] + radius_offset
+                offsetted_upper = centroid_upper[i] + radius_offset
+                offsetted_center = centroid_center[i] + radius_offset
+                
                 # Get a more prominent color for centroids
                 base_color = cluster_colors[i]
                 dark_color = tuple([c*0.7 for c in base_color[:3]] + [1.0])  # Darker, fully opaque
                 
                 # Close the loop for centroids
-                centroid_lower_loop = np.append(centroid_lower[i], centroid_lower[i, 0])
-                centroid_upper_loop = np.append(centroid_upper[i], centroid_upper[i, 0])
-                centroid_center_loop = np.append(centroid_center[i], centroid_center[i, 0])
+                centroid_lower_loop = np.append(offsetted_lower, offsetted_lower[0])
+                centroid_upper_loop = np.append(offsetted_upper, offsetted_upper[0])
+                centroid_center_loop = np.append(offsetted_center, offsetted_center[0])
                 
                 # Plot center line for centroid with high visibility
                 line_width = 2.5 if highlight_centroids else 1.5
@@ -212,9 +263,8 @@ class IntervalRadarChart:
                         color=dark_color, edgecolor='white', linewidth=1, 
                         zorder=9)
         
-        # Set axis limits - use the same max value for all features to create uniform circular grid
-        max_radius = np.max(all_maxs) * 1.2  # Allow extra space for labels but not too much
-        ax.set_ylim(0, max_radius)
+        # Set axis limits to show all data plus some margin
+        ax.set_ylim(r_min + radius_offset, r_max + radius_offset)
         ax.set_xticks([])
         ax.set_yticks([])
         
