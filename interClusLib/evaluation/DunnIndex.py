@@ -4,7 +4,7 @@ from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
 
 def dunn_index(data: np.ndarray,
                 labels: np.ndarray,
-                metric) -> float:
+                centers ,metric) -> float:
     """
     Computes the Dunn Index for an unlabeled clustering.
     

@@ -73,7 +73,7 @@ def calinski_harabasz_index(
     # unify function to get distance
     def dist(a, b):
         val = distance_func(a, b)
-        if isSim:
+        if is_sim:
             return 1.0 - val
         else:
             return val

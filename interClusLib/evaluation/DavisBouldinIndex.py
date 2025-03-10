@@ -40,6 +40,8 @@ def davies_bouldin_index(
     dbi = Evaluation.davies_bouldin_index(data, labels, kmeans.centroids_, my_hausdorff)
     print("Davies-Bouldin =", dbi)
     """
+
+
     if metric in SIMILARITY_FUNCTIONS:
         distance_func = SIMILARITY_FUNCTIONS[metric]
         is_sim = True
@@ -67,7 +69,7 @@ def davies_bouldin_index(
     # 2) define a small "get_dist" to unify distance vs. similarity
     def dist(x, y):
         val = distance_func(x, y)
-        if isSim:
+        if is_sim:
             return 1.0 - val
         else:
             return val

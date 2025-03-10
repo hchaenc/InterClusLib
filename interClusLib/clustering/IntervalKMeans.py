@@ -23,6 +23,7 @@ class IntervalKMeans:
         self.tol = tol
         self.random_state = np.random.RandomState(random_state)
         self.train_data = None
+        self.isSim = None
         
         # 保存原始的distance_func名称，用于创建新实例时使用
         self.distance_func_name = distance_func if isinstance(distance_func, str) else 'custom'
@@ -118,97 +119,111 @@ class IntervalKMeans:
         if self.labels_ is None:
             raise RuntimeError("Model not fitted yet.")
         return self.labels_
-        
-    def find_optimal_clusters(self, intervals, min_clusters=2, max_clusters=10, 
-                              method='l-method', eval_metric='distortion', 
-                              visualize=True, **kwargs):
+
+    def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
+                               metrics=['distortion'], distance_func=None, 
+                               max_iter=None, tol=None, random_state=None, 
+                               n_init=1):
         """
-        确定最佳聚类数量
+        Compute evaluation metrics for a range of cluster numbers.
         
-        参数:
-        intervals: array-like, 形状为(n_samples, n_dims, 2)的区间数据
-        min_clusters: int, 最小聚类数
-        max_clusters: int, 最大聚类数
-        method: str, 确定最佳聚类数的方法，可选值: 'l-method', 'elbow', 'optimize'
-        eval_metric: str, 评估指标，可选值取决于已注册的指标
-        visualize: bool, 是否可视化结果
-        **kwargs: 传递给聚类算法的额外参数
+        Parameters:
+        -----------
+        intervals : array-like
+            Interval data with shape (n_samples, n_dims, 2)
+        min_clusters : int, default=2
+            Minimum number of clusters to evaluate
+        max_clusters : int, default=10
+            Maximum number of clusters to evaluate
+        metrics : list of str, default=['distortion']
+            Metrics to compute, can be any key from the EVALUATION dictionary
+        distance_func : str or callable, default=None
+            Distance function name or callable. If None, uses the current instance's distance function.
+        max_iter : int, default=None
+            Maximum number of iterations. If None, uses the current instance's value.
+        tol : float, default=None
+            Convergence tolerance. If None, uses the current instance's value.
+        random_state : int, default=None
+            Random seed. If None, uses the current instance's value.
+        n_init : int, default=1
+            Number of times to run the algorithm with different centroid seeds.
         
-        返回:
-        int: 最佳聚类数量
-        dict: 评估结果
+        Returns:
+        --------
+        dict
+            Dictionary where keys are metric names and values are dictionaries 
+            mapping k values to metric results
         """
-        from interClusLib.cluster_number import metric_registry, l_method, elbow_method, optimize_metric
-        import numpy as np
-        import matplotlib.pyplot as plt
+        from interClusLib.evaluation import EVALUATION
         
-        # 获取评估指标函数
-        metric_fn = metric_registry.get_function(eval_metric)
-        maximize = metric_registry.should_maximize(eval_metric)
+        # Check if requested metrics are valid
+        for metric in metrics:
+            if metric not in EVALUATION:
+                raise ValueError(f"Unknown metric: {metric}. Available options: {list(EVALUATION.keys())}")
         
-        # 保存当前参数
-        current_max_iter = self.max_iter
-        current_tol = self.tol
-        current_distance_func = self.distance_func_name  # 使用保存的距离函数名称
+        # Use current instance parameters if not specified
+        distance_func = distance_func or self.distance_func_name
+        max_iter = max_iter or self.max_iter
+        tol = tol or self.tol
+        random_state = random_state if random_state is not None else (
+            self.random_state.randint(0, 10000) if isinstance(self.random_state, np.random.RandomState) 
+            else self.random_state
+        )
         
-        # 计算不同聚类数量下的评估指标
-        eval_results = {}
+        # Initialize results dictionary
+        results = {metric: {} for metric in metrics}
+        
+        # Compute metrics for each k value
         for k in range(min_clusters, max_clusters + 1):
-            # 使用当前类创建模型
-            model = self.__class__(
-                n_clusters=k,
-                max_iter=kwargs.get('max_iter', current_max_iter),
-                tol=kwargs.get('tol', current_tol),
-                distance_func=kwargs.get('distance_func', current_distance_func),
-                random_state=kwargs.get('random_state', 42)
-            )
+            best_inertia = float('inf')
+            best_model = None
             
-            # 训练模型
-            model.fit(intervals)
+            # Run multiple initializations
+            for init in range(n_init):
+                try:
+                    model = self.__class__(
+                        n_clusters=k,
+                        max_iter=max_iter,
+                        tol=tol,
+                        distance_func=distance_func,
+                        random_state=random_state + init if random_state is not None else None
+                    )
+                    model.fit(intervals)
+                    
+                    # Calculate inertia for best model selection
+                    inertia = 0
+                    for i, sample in enumerate(intervals):
+                        cluster_idx = model.labels_[i]
+                        centroid = model.centroids_[cluster_idx]
+                        dist = model.distance_function(sample, centroid)
+                        # Convert similarity to distance if needed
+                        if model.isSim:
+                            dist = 1 - dist
+                        inertia += dist ** 2
+                    
+                    # Keep the best model based on inertia
+                    if inertia < best_inertia:
+                        best_inertia = inertia
+                        best_model = model
+                except Exception as e:
+                    print(f"Error fitting model with k={k}, initialization {init}: {e}")
             
-            # 根据评估指标函数的需要提供不同的参数
-            if eval_metric in ['distortion', 'davies_bouldin', 'calinski_harabasz']:
-                # 这些指标需要中心点信息
-                score = metric_fn(
-                    data=intervals,
-                    labels=model.labels_,
-                    centers=model.centroids_,
-                    metric=current_distance_func,
-                )
-            else:  # 'silhouette', 'dunn' 或其他指标
-                # 这些指标只需要数据和标签
-                score = metric_fn(
-                    data=intervals,
-                    labels=model.labels_,
-                    metric=current_distance_func,
-                )
-            eval_results[k] = score
+            if best_model is None:
+                print(f"Failed to fit model for k={k}, skipping")
+                continue
+                
+            # Calculate all requested metrics
+            for metric in metrics:
+                try:
+                    metric_func = EVALUATION[metric]
+                    metric_value = metric_func(
+                        data=intervals,
+                        labels=best_model.labels_,
+                        centers=best_model.centroids_,
+                        metric=distance_func
+                    )
+                    results[metric][k] = metric_value
+                except Exception as e:
+                    print(f"Error calculating {metric} for k={k}: {e}")
         
-        # 确定最佳聚类数量
-        if method.lower() == 'l_method':
-            optimal_k = l_method(eval_results, min_clusters, max_clusters)
-        elif method.lower() == 'elbow':
-            optimal_k = elbow_method(eval_results, min_clusters, max_clusters, convex=maximize)
-        elif method.lower() == 'optimize':
-            optimal_k = optimize_metric(eval_results, min_clusters, max_clusters, maximize=maximize)
-        else:
-            raise ValueError(f"不支持的方法: {method}")
-        
-        # 可视化结果
-        if visualize:
-            from interClusLib.cluster_number.selector import ClusterNumberSelector
-            
-            # 创建并配置选择器
-            selector = ClusterNumberSelector(min_clusters, max_clusters)
-            selector.eval_results = np.array([(k, v) for k, v in sorted(eval_results.items())])
-            selector.optimal_k = optimal_k
-            
-            # 获取指标描述和绘图
-            metric_description = metric_registry.get_description(eval_metric)
-            plt = selector.plot_evaluation(
-                title=f"{method.capitalize()} Method - {metric_description}",
-                ylabel=metric_description
-            )
-            plt.show()
-        
-        return optimal_k, eval_results
+        return results
