@@ -9,7 +9,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 # 添加 `interClusLib` 的上级目录到 Python 路径
 sys.path.append(os.path.join(current_dir, ".."))
 import interClusLib
-from interClusLib.data_structure import IntervalData
+from interClusLib import IntervalData
 
 print(interClusLib.__file__)
 
