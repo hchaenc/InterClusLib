@@ -26,12 +26,6 @@ def distortion_score(data, labels, centers, metric) -> float:
     -------
     float
         The distortion score. Lower values indicate better clustering.
-
-    Example
-    -------
-        # Suppose you used an Interval K-Means giving you 'labels' and 'centers' for data:
-        score = Evaluation.distortion_score(data, labels, centers, metric='hausdorff')
-        print("Distortion:", score)
     """
     if len(data) != len(labels):
         raise ValueError("data and labels must have the same length.")

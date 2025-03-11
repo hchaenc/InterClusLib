@@ -104,9 +104,9 @@ class IntervalData:
                      cluster_centers=None,
                      cluster_std_center=1.0,
                      cluster_std_width=0.5,
-                     center_range=(-10, 10),    # 新参数：控制中心点的随机范围
-                     width_range=(0.1, 2.0),    # 新参数：控制宽度的随机范围
-                     min_width=0.05,            # 新参数：最小宽度限制
+                     center_range=(-10, 10),    
+                     width_range=(0.1, 2.0),    
+                     min_width=0.05,            
                      shuffle=True,
                      random_state=None):
         """

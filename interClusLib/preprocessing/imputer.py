@@ -1,12 +1,26 @@
 import numpy as np
 
 def impute_missing_intervals(interval_data, missing_mask, method='mean'):
-    """填充缺失的区间数据
+    """Impute missing interval data
     
-    方法:
-        - 'mean': 使用平均中点和宽度
-        - 'median': 使用中位数中点和宽度
-        - 'knn': 基于k近邻的插补
+    Methods:
+        - 'mean': Use the average midpoint and width
+        - 'median': Use the median midpoint and width
+        - 'knn': Imputation based on k-nearest neighbors
+    
+    Parameters:
+    -----------
+    interval_data: numpy.ndarray
+        Interval data with shape (n_samples, n_dim, 2)
+    missing_mask: numpy.ndarray
+        Boolean mask indicating missing values with shape (n_samples, n_dim)
+    method: str, default='mean'
+        Method to use for imputation
+        
+    Returns:
+    --------
+    numpy.ndarray
+        Imputed interval data with shape (n_samples, n_dim, 2)
     """
     n_samples, n_dim, _ = interval_data.shape
     imputed_data = interval_data.copy()
@@ -14,27 +28,28 @@ def impute_missing_intervals(interval_data, missing_mask, method='mean'):
     for d in range(n_dim):
         missing_idx = missing_mask[:, d]
         if not np.any(missing_idx):
-            continue
+            continue  # Skip if no missing data in this dimension
             
-        # 非缺失数据
         valid_data = interval_data[~missing_idx, d, :]
         
         if method == 'mean':
-            # 计算平均中点和宽度
+            # Calculate average midpoint and width
             midpoint = np.mean((valid_data[:, 0] + valid_data[:, 1]) / 2)
             width = np.mean(valid_data[:, 1] - valid_data[:, 0])
             
-            # 填充缺失值
+            # Fill missing values
             imputed_data[missing_idx, d, 0] = midpoint - width/2
             imputed_data[missing_idx, d, 1] = midpoint + width/2
             
         elif method == 'median':
-            # 计算中位数中点和宽度
+            # Calculate median midpoint and width
             midpoint = np.median((valid_data[:, 0] + valid_data[:, 1]) / 2)
             width = np.median(valid_data[:, 1] - valid_data[:, 0])
             
-            # 填充缺失值
+            # Fill missing values
             imputed_data[missing_idx, d, 0] = midpoint - width/2
             imputed_data[missing_idx, d, 1] = midpoint + width/2
+            
+        # Note: 'knn' method mentioned in docstring but not implemented
     
     return imputed_data

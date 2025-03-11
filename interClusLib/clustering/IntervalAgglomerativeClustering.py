@@ -10,16 +10,28 @@ class IntervalAgglomerativeClustering:
     """
     An Agglomerative (Hierarchical) Clustering for interval data (n_dims, 2).
     Uses a precomputed distance matrix from a custom distance function.
+    
+    Interval data is structured as arrays with shape (n_samples, n_dims, 2),
+    where the last dimension represents the lower and upper bounds of each interval.
     """
+    # Available distance metrics for interval data
     distance_funcs = {"hausdorff", "euclidean", "manhattan"}
+    # Available similarity metrics for interval data
     similarity_funcs = {"jaccard", "dice", "bidirectional_min","bidirectional_prod", "marginal"}
 
     def __init__(self, n_clusters=2, linkage='average', distance_func = 'euclidean'):
         """
-        :param n_clusters: int, number of clusters to find (you can also set distance_threshold instead).
-        :param linkage: str, linkage criterion ('complete', 'average', 'single').
-        :param distance_func: a function(interval_a, interval_b) -> distance (scalar).
-        :param aggregate: str, how to combine distance across dimensions if needed (e.g., 'mean', 'sum', 'max').
+        Initialize the interval clustering algorithm.
+        
+        Parameters:
+        -----------
+        n_clusters: int, default=2
+            Number of clusters to find.
+        linkage: str, default='average'
+            Linkage criterion ('complete', 'average', 'single').
+        distance_func: str, default='euclidean'
+            Name of the distance/similarity function to use.
+            Can be one of the distance_funcs or similarity_funcs.
         """
         self.n_clusters = n_clusters
         self.linkage = linkage
@@ -28,6 +40,7 @@ class IntervalAgglomerativeClustering:
         self.labels_ = None
         self.distance_func = distance_func
 
+        # Determine if the metric is a similarity or distance function
         if self.distance_func in self.distance_funcs:
             self.isSim = False
         elif self.distance_func in self.similarity_funcs:
@@ -36,13 +49,28 @@ class IntervalAgglomerativeClustering:
             raise ValueError(f"Unsupported metric: {self.distance_func}")
     
     def compute_distance_matrix(self, intervals):
+        """
+        Compute the pairwise distance/similarity matrix for interval data.
+        
+        Parameters:
+        -----------
+        intervals: numpy.ndarray
+            Interval data with shape (n_samples, n_dims, 2)
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Distance matrix with shape (n_samples, n_samples)
+        """
         if self.isSim:
+            # For similarity functions, compute similarity and convert to distance
             dist_matrix = pairwise_similarity(
                 intervals, 
                 metric=self.distance_func
             )
-            dist_matrix = 1 - dist_matrix
+            dist_matrix = 1 - dist_matrix  # Convert similarity to distance
         else:
+            # For distance functions, compute distance directly
             dist_matrix = pairwise_distance(
                 intervals, 
                 metric=self.distance_func
@@ -51,15 +79,15 @@ class IntervalAgglomerativeClustering:
 
     def _compute_centroids(self, intervals, labels, n_clusters):
         """
-        Compute the centroids for each cluster
+        Compute the centroids for each cluster.
         
         Parameters:
         -----------
-        intervals : numpy.ndarray
+        intervals: numpy.ndarray
             Interval data with shape (n_samples, n_dims, 2)
-        labels : numpy.ndarray
+        labels: numpy.ndarray
             Cluster labels with shape (n_samples,)
-        n_clusters : int
+        n_clusters: int
             Number of clusters
             
         Returns:
@@ -86,15 +114,17 @@ class IntervalAgglomerativeClustering:
 
     def fit(self, intervals):
         """
-        Fit the hierarchical clustering model to the interval data
+        Fit the hierarchical clustering model to the interval data.
         
         Parameters:
         -----------
-        intervals: shape (n_samples, n_dims, 2)
-            Interval data to cluster
+        intervals: numpy.ndarray
+            Interval data to cluster with shape (n_samples, n_dims, 2)
         """
+        # Compute the distance matrix for the interval data
         dist_matrix = self.compute_distance_matrix(intervals)
 
+        # Initialize the scikit-learn AgglomerativeClustering with precomputed distances
         self.model_ = AgglomerativeClustering(
             n_clusters=self.n_clusters,
             metric='precomputed', 
@@ -103,25 +133,55 @@ class IntervalAgglomerativeClustering:
         )
         self.model_.fit(dist_matrix)
 
+        # Store the cluster labels and input data
         self.labels_ = self.model_.labels_
         self.train_data = intervals
         
-        # Calculate and store cluster centroids
+        # Calculate and store cluster centroids for later use
         self.centroids_ = self._compute_centroids(intervals, self.labels_, self.n_clusters)
 
     def get_labels(self):
+        """
+        Get the cluster labels for the training data.
+        
+        Returns:
+        --------
+        numpy.ndarray
+            Cluster labels with shape (n_samples,)
+            
+        Raises:
+        -------
+        RuntimeError
+            If the model has not been fitted yet.
+        """
         if self.labels_ is None:
             raise RuntimeError("Model not fitted yet.")
         return self.labels_
     
     def predict(self, intervals_new, method='knn', k=5):
         """
-        预测新数据点的聚类标签
+        Predict cluster labels for new interval data.
         
-        :param intervals_new: 形状 (n_samples, n_dims, 2)
-        :param method: 预测方法，可选 'knn', 'center', 'nearest'
-        :param k: knn方法的邻居数量
-        :return: 预测的标签
+        Parameters:
+        -----------
+        intervals_new: numpy.ndarray
+            New interval data with shape (n_samples, n_dims, 2)
+        method: str, default='knn'
+            Prediction method, either 'knn' or 'center'
+        k: int, default=5
+            Number of neighbors to consider in the knn method
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Predicted cluster labels with shape (n_samples,)
+            
+        Raises:
+        -------
+        RuntimeError
+            If the model has not been fitted yet.
+        ValueError
+            If an unsupported prediction method is specified.
         """
         if not hasattr(self, 'train_data') or self.labels_ is None:
             raise RuntimeError("Model not fitted yet.")
@@ -134,22 +194,36 @@ class IntervalAgglomerativeClustering:
             raise ValueError(f"Unsupported prediction method: {method}")
     
     def _predict_knn(self, intervals_new, k):
-        """使用KNN方法预测"""
-        # 计算新数据与训练数据之间的距离
-        if self.ifSim:
-            cross_dist = cross_similarity(intervals_new, self.train_data, metric = self.distance_func)
-            cross_dist = 1 - cross_dist
-        else:
-            cross_dist = cross_distance(intervals_new, self.train_data, metric = self.distance_func)
+        """
+        Predict cluster labels using the k-nearest neighbors approach.
         
-        # 对每个新样本，找到k个最近的训练样本
+        Parameters:
+        -----------
+        intervals_new: numpy.ndarray
+            New interval data with shape (n_samples, n_dims, 2)
+        k: int
+            Number of neighbors to consider
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Predicted cluster labels with shape (n_samples,)
+        """
+        # Calculate distances between new data and training data
+        if self.isSim:
+            cross_dist = cross_similarity(intervals_new, self.train_data, metric=self.distance_func)
+            cross_dist = 1 - cross_dist  # Convert similarity to distance
+        else:
+            cross_dist = cross_distance(intervals_new, self.train_data, metric=self.distance_func)
+        
+        # For each new sample, find k nearest training samples
         predictions = []
         for i in range(len(intervals_new)):
-            # 获取k个最近邻
+            # Get indices of k nearest neighbors
             nearest_indices = np.argsort(cross_dist[i])[:k]
             nearest_labels = [self.labels_[idx] for idx in nearest_indices]
             
-            # 投票选择最常见的标签
+            # Vote to select the most common label
             from collections import Counter
             most_common = Counter(nearest_labels).most_common(1)[0][0]
             predictions.append(most_common)
@@ -157,34 +231,35 @@ class IntervalAgglomerativeClustering:
         return np.array(predictions)
     
     def _predict_centers(self, intervals_new):
-        """使用聚类中心预测"""
-        # 计算每个聚类的中心
-        centers = []
-        for cluster_id in range(self.n_clusters):
-            cluster_indices = np.where(self.labels_ == cluster_id)[0]
-            cluster_data = self.train_data[cluster_indices]
+        """
+        Predict cluster labels by finding the closest cluster center.
+        
+        Parameters:
+        -----------
+        intervals_new: numpy.ndarray
+            New interval data with shape (n_samples, n_dims, 2)
             
-            # 为每个维度分别计算区间的中心
-            # 这里我们计算每个维度的下界和上界的平均值，保持区间的形式
-            # cluster_data形状: (n_samples, n_dims, 2)
-            center = np.mean(cluster_data, axis=0)  # 形状保持为 (n_dims, 2)
-            centers.append(center)
+        Returns:
+        --------
+        numpy.ndarray
+            Predicted cluster labels with shape (n_samples,)
+        """
+        # Use the pre-computed centroids from the fit method
+        centers = self.centroids_  # Shape: (n_clusters, n_dims, 2)
         
-        centers = np.array(centers)  # 形状: (n_clusters, n_dims, 2)
-        
-        # 计算到每个中心的距离
+        # Calculate distances to each center
         predictions = []
         for interval in intervals_new:
             distances = []
             for center in centers:
-                # 使用原始相似度计算方法
+                # Use the original distance calculation method
                 combined = np.stack([interval, center])
                 dist_matrix = self.compute_distance_matrix(combined)
-                dist = dist_matrix[0, 1]  # 获取交叉距离
+                dist = dist_matrix[0, 1]  # Get the cross-distance
                 
                 distances.append(dist)
             
-            # 分配到最近的中心
+            # Assign to the closest center
             closest_center = np.argmin(distances)
             predictions.append(closest_center)
         
@@ -195,23 +270,22 @@ class IntervalAgglomerativeClustering:
                        linkage=None):
         """
         Compute evaluation metrics for a range of cluster numbers for hierarchical clustering.
+        This is useful for determining the optimal number of clusters.
         
         Parameters:
         -----------
-        intervals : array-like
+        intervals: numpy.ndarray
             Interval data with shape (n_samples, n_dims, 2)
-        min_clusters : int, default=2
+        min_clusters: int, default=2
             Minimum number of clusters to evaluate
-        max_clusters : int, default=10
+        max_clusters: int, default=10
             Maximum number of clusters to evaluate
-        metrics : list of str, default=['distortion']
+        metrics: list of str, default=['distortion']
             Metrics to compute, can be any key from the EVALUATION dictionary
-        distance_func : str, default=None
+        distance_func: str, default=None
             Distance function name. If None, uses the current instance's distance function.
-        linkage : str, default=None
+        linkage: str, default=None
             Linkage criterion. If None, uses the current instance's linkage.
-        random_state : int, default=None
-            Random seed (not used in hierarchical clustering but kept for API consistency).
         
         Returns:
         --------
@@ -236,6 +310,7 @@ class IntervalAgglomerativeClustering:
         # Compute metrics for each k value
         for k in range(min_clusters, max_clusters + 1):
             try:
+                # Create a new model instance with k clusters
                 model = self.__class__(
                     n_clusters=k,
                     linkage=linkage,
@@ -251,6 +326,7 @@ class IntervalAgglomerativeClustering:
                         # Use the pre-computed centroids from the model
                         centers = model.centroids_
                         
+                        # Compute the metric value
                         metric_value = metric_func(
                             data=intervals,
                             labels=model.labels_,
