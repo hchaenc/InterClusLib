@@ -3,7 +3,6 @@ import numpy as np
 from numpy.random import RandomState
 from warnings import warn
 from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
-import os
 
 class IntervalKMeans:
     """

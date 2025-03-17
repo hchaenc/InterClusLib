@@ -3,3 +3,7 @@ __pycache__/
 *.pyo
 .DS_Store
 .env
+
+# Python egg metadata
+*.egg-info/
+*.egg

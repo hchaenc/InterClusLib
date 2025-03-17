@@ -8,5 +8,13 @@ setup(
     author = 'Jiashu CHEN',
     author_email = 'jiashuchen758@gmail.com',
     license = 'MIT',
+    install_requires = [
+        'pandas',
+        'numpy',
+        'matplotlib',
+        'seaborn',
+        'scipy',
+        'scikit-learn',
+    ],
     packages = find_packages(),
 )
