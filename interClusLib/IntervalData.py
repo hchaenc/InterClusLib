@@ -6,19 +6,46 @@ import re
 class IntervalData:
     """
     Handles interval data, supports CSV and XLSX loading while preserving original column names
+    Added support for handling missing values (NaN)
     """
-    def __init__(self, data):
+    def __init__(self, data, handle_missing=True):
         """
         :param data: Pandas DataFrame
+        :param handle_missing: Whether to handle missing values or raise an error
         """
+        self.handle_missing = handle_missing
         self.data = self._validate_data(data)
         self.interval_columns = self._detect_intervals()
+        self.has_missing_values = self._check_missing_values()
 
     def _validate_data(self, data):
         """ Ensures that the input data is a Pandas DataFrame """
         if not isinstance(data, pd.DataFrame):
             raise ValueError("Input data must be a Pandas DataFrame!")
+        
+        # Report on missing values but don't fail
+        missing_values = data.isnull().sum().sum()
+        if missing_values > 0:
+            print(f"Warning: DataFrame contains {missing_values} missing values.")
+            print(data.isnull().sum())
+            
+            if not self.handle_missing:
+                raise ValueError("DataFrame contains missing values. Set handle_missing=True to proceed anyway.")
+        
         return data
+
+    def _check_missing_values(self):
+        """
+        Check if the data contains missing values and return True/False
+        Returns a Python native bool, not a numpy.bool_
+        """
+        missing_count = 0
+        for lower, upper in self.interval_columns:
+            interval_df = self.data[[lower, upper]]
+            missing_count += interval_df.isnull().sum().sum()
+        
+        # 使用bool()确保返回Python原生布尔值，而不是numpy.bool_
+        return bool(missing_count > 0)
 
     def _detect_intervals(self):
         """ Automatically detects paired interval columns while preserving original column names """
@@ -49,22 +76,22 @@ class IntervalData:
         return interval_pairs
 
     @classmethod
-    def from_csv(cls, file_path):
+    def from_csv(cls, file_path, handle_missing=True):
         """ Loads interval data from a CSV file """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {file_path} does not exist!")
 
         data = pd.read_csv(file_path)
-        return cls(data)
+        return cls(data, handle_missing=handle_missing)
 
     @classmethod
-    def from_excel(cls, file_path, sheet_name=0):
+    def from_excel(cls, file_path, sheet_name=0, handle_missing=True):
         """ Loads interval data from an Excel file """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {file_path} does not exist!")
 
         data = pd.read_excel(file_path, sheet_name=sheet_name)
-        return cls(data)
+        return cls(data, handle_missing=handle_missing)
 
     @classmethod
     def random_data(cls, n, m, lower=0, upper=100):
@@ -204,15 +231,64 @@ class IntervalData:
         return cls(df)
 
     def get_intervals(self):
-        """ Returns interval data as a NumPy array in the shape [n_samples, n_intervals, 2] """
-        interval_data = np.array([
-            self.data[[lower, upper]].to_numpy() for lower, upper in self.interval_columns
-        ]).transpose((1, 0, 2))  # Reshape to (n_samples, n_intervals, 2)
-        return interval_data
+        """ 
+        Returns interval data as a NumPy array in the shape [n_samples, n_intervals, 2]
+        Modified to handle NaN values by either using a mask or safe conversion
+        """
+        if self.has_missing_values:
+            # Method 1: Create masked array to preserve NaN information
+            interval_data = []
+            for lower, upper in self.interval_columns:
+                pair_data = self.data[[lower, upper]].to_numpy()
+                interval_data.append(pair_data)
+            
+            # Convert to numpy array with NaN values preserved
+            interval_data = np.array(interval_data).transpose((1, 0, 2))
+            
+            # Log warning about NaN values
+            print(f"Warning: get_intervals() contains {np.isnan(interval_data).sum()} NaN values.")
+            return interval_data
+        else:
+            # Original method for data without NaN
+            interval_data = np.array([
+                self.data[[lower, upper]].to_numpy() for lower, upper in self.interval_columns
+            ]).transpose((1, 0, 2))
+            return interval_data
 
     def to_dataframe(self):
         """ Returns the original Pandas DataFrame """
         return self.data
+    
+    def validate_intervals(self, fix_invalid=False):
+        """
+        Validates that lower bounds are less than or equal to upper bounds.
+        Optionally fixes invalid intervals by swapping values.
+        
+        :param fix_invalid: If True, swap values where lower > upper
+        :return: DataFrame with validated/fixed intervals
+        """
+        fixed_data = self.data.copy()
+        invalid_count = 0
+        
+        for lower, upper in self.interval_columns:
+            # Find rows where lower > upper (accounting for NaN values)
+            mask = (fixed_data[lower] > fixed_data[upper]) & (~fixed_data[lower].isna()) & (~fixed_data[upper].isna())
+            invalid_count += mask.sum()
+            
+            if fix_invalid and mask.sum() > 0:
+                # Swap values for invalid intervals
+                tmp = fixed_data.loc[mask, lower].copy()
+                fixed_data.loc[mask, lower] = fixed_data.loc[mask, upper]
+                fixed_data.loc[mask, upper] = tmp
+                print(f"Fixed {mask.sum()} invalid intervals in {lower}/{upper}")
+        
+        if invalid_count > 0:
+            if fix_invalid:
+                return IntervalData(fixed_data)
+            else:
+                print(f"Warning: Found {invalid_count} intervals where lower > upper")
+        
+        return self if not fix_invalid else IntervalData(fixed_data)
 
     def summary(self):
         """ Prints basic statistical information and detected interval columns """
@@ -221,6 +297,10 @@ class IntervalData:
         print("\nDetected interval columns:")
         for lower, upper in self.interval_columns:
             print(f"- {lower} / {upper}")
+        
+        if self.has_missing_values:
+            print("\nMissing values per column:")
+            print(self.data.isnull().sum())
     
     def save_to_csv(self, file_path):
         """ Saves the data to a CSV file """
