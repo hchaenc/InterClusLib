@@ -15,7 +15,12 @@ class IntervalData:
         """
         self.handle_missing = handle_missing
         self.data = self._validate_data(data)
-        self.interval_columns = self._detect_intervals()
+        
+        # 添加columns和features属性
+        self.columns = self._get_all_columns()
+        self.features = self._extract_feature_names()
+        
+        # 保留has_missing_values属性
         self.has_missing_values = self._check_missing_values()
 
     def _validate_data(self, data):
@@ -39,10 +44,8 @@ class IntervalData:
         Check if the data contains missing values and return True/False
         Returns a Python native bool, not a numpy.bool_
         """
-        missing_count = 0
-        for lower, upper in self.interval_columns:
-            interval_df = self.data[[lower, upper]]
-            missing_count += interval_df.isnull().sum().sum()
+        # 直接检查整个数据框中是否有缺失值
+        missing_count = self.data.isnull().sum().sum()
         
         # 使用bool()确保返回Python原生布尔值，而不是numpy.bool_
         return bool(missing_count > 0)
@@ -74,6 +77,30 @@ class IntervalData:
             raise ValueError("No valid interval columns detected. Ensure columns are formatted as '_lower' and '_upper'.")
 
         return interval_pairs
+    
+    def _get_all_columns(self):
+        """
+        Returns a list of all column names in the data
+        按照用户要求返回形如[feature_1_lower, feature_1_upper, feature_2_lower]的列名列表
+        """
+        return self.data.columns.tolist()
+    
+    def _extract_feature_names(self):
+        """
+        Extracts the base feature names from all columns
+        返回形如[feature_1, feature_2]的特征名列表
+        """
+        feature_names = []
+        pattern = re.compile(r"(.*)_(lower|upper)", re.IGNORECASE)
+        
+        for col in self.columns:
+            match = pattern.match(col)
+            if match:
+                feature_name = match.group(1)
+                if feature_name not in feature_names:
+                    feature_names.append(feature_name)
+        
+        return feature_names
 
     @classmethod
     def from_csv(cls, file_path, handle_missing=True):
@@ -235,10 +262,20 @@ class IntervalData:
         Returns interval data as a NumPy array in the shape [n_samples, n_intervals, 2]
         Modified to handle NaN values by either using a mask or safe conversion
         """
+        # 先需要获取所有的interval pairs
+        interval_pairs = []
+        features = self.features
+        
+        for feature in features:
+            lower_col = f"{feature}_lower"
+            upper_col = f"{feature}_upper"
+            if lower_col in self.columns and upper_col in self.columns:
+                interval_pairs.append((lower_col, upper_col))
+        
         if self.has_missing_values:
             # Method 1: Create masked array to preserve NaN information
             interval_data = []
-            for lower, upper in self.interval_columns:
+            for lower, upper in interval_pairs:
                 pair_data = self.data[[lower, upper]].to_numpy()
                 interval_data.append(pair_data)
             
@@ -251,7 +288,7 @@ class IntervalData:
         else:
             # Original method for data without NaN
             interval_data = np.array([
-                self.data[[lower, upper]].to_numpy() for lower, upper in self.interval_columns
+                self.data[[lower, upper]].to_numpy() for lower, upper in interval_pairs
             ]).transpose((1, 0, 2))
             return interval_data
 
@@ -270,7 +307,17 @@ class IntervalData:
         fixed_data = self.data.copy()
         invalid_count = 0
         
-        for lower, upper in self.interval_columns:
+        # 获取所有的interval pairs
+        interval_pairs = []
+        features = self.features
+        
+        for feature in features:
+            lower_col = f"{feature}_lower"
+            upper_col = f"{feature}_upper"
+            if lower_col in self.columns and upper_col in self.columns:
+                interval_pairs.append((lower_col, upper_col))
+        
+        for lower, upper in interval_pairs:
             # Find rows where lower > upper (accounting for NaN values)
             mask = (fixed_data[lower] > fixed_data[upper]) & (~fixed_data[lower].isna()) & (~fixed_data[upper].isna())
             invalid_count += mask.sum()
@@ -294,9 +341,30 @@ class IntervalData:
         """ Prints basic statistical information and detected interval columns """
         print("Data Summary:")
         print(self.data.describe())
-        print("\nDetected interval columns:")
-        for lower, upper in self.interval_columns:
+        
+        # 获取所有的interval pairs并打印
+        interval_pairs = []
+        features = self.features
+        
+        for feature in features:
+            lower_col = f"{feature}_lower"
+            upper_col = f"{feature}_upper"
+            if lower_col in self.columns and upper_col in self.columns:
+                interval_pairs.append((lower_col, upper_col))
+        
+        print("\nInterval column pairs:")
+        for lower, upper in interval_pairs:
             print(f"- {lower} / {upper}")
+        
+        print("\nFeature names:")
+        for feature in self.features:
+            print(f"- {feature}")
+            
+        print("\nAll columns:")
+        print(self.columns)
+        
+        print("\nHas missing values:")
+        print(self.has_missing_values)
         
         if self.has_missing_values:
             print("\nMissing values per column:")
