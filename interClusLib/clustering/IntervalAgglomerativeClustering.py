@@ -24,7 +24,7 @@ class IntervalAgglomerativeClustering:
         'ward': 'ward'
     }
 
-    def __init__(self, n_clusters=2, linkage='average', distance_func='euclidean', metric='precomputed'):
+    def __init__(self, n_clusters=2, linkage='average', distance_func='euclidean'):
         """
         Initialize the interval clustering algorithm.
         
@@ -47,7 +47,6 @@ class IntervalAgglomerativeClustering:
         self.n_clusters = n_clusters
         self.linkage = linkage
         self.distance_func = distance_func
-        self.metric = metric
         
         # Will be set during fitting
         self.labels_ = None
