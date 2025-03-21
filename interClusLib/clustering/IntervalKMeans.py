@@ -107,13 +107,6 @@ class IntervalKMeans:
         self.centroids_ = centroids
         self.labels_ = labels
 
-    def predict(self, intervals):
-        """
-        Assign new data points to the closest cluster.
-        """
-        predictions = self._assign_clusters(intervals, self.centroids_)
-        return predictions
-
     def get_labels(self):
         if self.labels_ is None:
             raise RuntimeError("Model not fitted yet.")

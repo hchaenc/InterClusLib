@@ -317,28 +317,6 @@ class IntervalFuzzyCMeans:
         self.centroids_ = self._convert_centers_to_intervals()
         return self
 
-    def predict(self, intervals):
-        """
-        Predicts the cluster assignments for new interval-valued data.
-
-        Parameters:
-            intervals (np.ndarray): A 3D array of shape (n_samples, n_dims, 2), 
-                                    where each sample consists of interval-valued features.
-
-        Returns:
-            np.ndarray: A 1D array of shape (n_samples,) containing the hard cluster assignments.
-        """
-        if self.U is None or self.centers_a is None or self.centers_b is None:
-            raise RuntimeError("Model has not been fitted yet. Please call `fit()` before prediction.")
-
-        distances = self._compute_distances_matrix(intervals)
-        
-        # Compute membership values for the new intervals
-        new_U = self._update_membership(intervals, distances)
-
-        # Return hard assignments (cluster index with the highest membership)
-        return new_U  # Shape: (n_samples, n_clusters)
-
     def get_membership(self):
         """
         Return final membership matrix (U) after fit.
