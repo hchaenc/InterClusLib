@@ -7,8 +7,8 @@ class Interval2d:
     """Class for 2D interval visualization"""
     
     @staticmethod
-    def visualize(intervals=None, centroids=None, labels=None, figsize=(8, 8), title="2D Intervals", 
-                  alpha=0.3, centroid_alpha=0.6, margin=0.5, feature_names=None, 
+    def visualize(intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
+                  figsize=(8, 8), title="2D Intervals", alpha=0.3, centroid_alpha=0.6, margin=0.5, feature_names=None, 
                   fill_intervals=False):
         """
         Unified visualization function for 2D intervals with optional centroids
@@ -28,6 +28,7 @@ class Interval2d:
         :param margin: Margin around axis limits, default is 0.5
         :param feature_names: List of feature names, default is None, will auto-generate ["x1", "x2"]
         :param fill_intervals: Whether to fill the intervals with color, default is False
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: fig, ax - matplotlib figure and axes objects
         """
         # Validate input: at least one of intervals or centroids must be provided
@@ -41,7 +42,8 @@ class Interval2d:
         if intervals is not None:
             processed_intervals = Interval2d._process_intervals(intervals)
             interval_legend_handles = Interval2d.draw_2d_intervals(ax, processed_intervals, labels, 
-                                                                 alpha=alpha, fill=fill_intervals)
+                                                                 alpha=alpha, fill=fill_intervals,
+                                                                 max_samples_per_cluster=max_samples_per_cluster)
         else:
             processed_intervals = None
             
@@ -211,7 +213,7 @@ class Interval2d:
     
     @staticmethod
     def draw_2d_intervals(ax, intervals, labels=None, alpha=0.3, line_width=2, 
-                          fill=False):
+                          fill=False, max_samples_per_cluster=None):
         """
         Draw each 2D interval as a rectangle (or square for 1D) in the given axes 'ax'.
         
@@ -222,6 +224,7 @@ class Interval2d:
         :param alpha: Transparency, default is 0.3
         :param line_width: Line width, default is 2
         :param fill: Whether to fill the intervals with color, default is False
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: List of legend handles
         """
         n_dims = intervals.shape[1]
@@ -233,6 +236,15 @@ class Interval2d:
 
             for idx, lab in enumerate(unique_labels):
                 mask = (labels == lab)
+                sub_intervals_indices = np.where(mask)[0]
+                
+                # Limit samples per cluster if specified
+                if max_samples_per_cluster is not None and len(sub_intervals_indices) > max_samples_per_cluster:
+                    np.random.seed(42)  # For reproducibility
+                    selected_indices = np.random.choice(sub_intervals_indices, max_samples_per_cluster, replace=False)
+                    mask = np.zeros_like(mask)
+                    mask[selected_indices] = True
+                
                 sub_intervals = intervals[mask]
                 color = cmap(idx)
                 
@@ -282,7 +294,16 @@ class Interval2d:
         else:
             # No labels, all intervals use the same color
             color = "blue"
-            for interval in intervals:
+            
+            # If max_samples_per_cluster is specified, limit the number of intervals displayed
+            if max_samples_per_cluster is not None and len(intervals) > max_samples_per_cluster:
+                np.random.seed(42)  # For reproducibility
+                selected_indices = np.random.choice(len(intervals), max_samples_per_cluster, replace=False)
+                intervals_to_draw = intervals[selected_indices]
+            else:
+                intervals_to_draw = intervals
+                
+            for interval in intervals_to_draw:
                 if n_dims == 1:  # 1D intervals -> squares
                     lower, upper = interval[0, 0], interval[0, 1]
                     width = height = upper - lower

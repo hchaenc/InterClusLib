@@ -18,7 +18,7 @@ class Dendrogram:
     def visualize(dendrogram_data, figsize=(10, 6), title="Hierarchical Clustering Dendrogram", 
                   color_threshold=None, orientation='top', 
                   leaf_font_size=10, show_leaf_counts=True, truncate_mode=None,
-                  p=30, leaf_rotation=90., no_plot=False, count_sort=False,
+                  p=30, leaf_rotation=90., count_sort=False,
                   show_distances=False, n_clusters=None):
         """
         Visualize the hierarchical clustering as a dendrogram.
@@ -51,8 +51,6 @@ class Dendrogram:
             P parameter for truncation (used with truncate_mode)
         leaf_rotation : float, default=90.
             Rotation angle for leaf labels
-        no_plot : bool, default=False
-            When True, only computes the dendrogram data without plotting
         count_sort : bool or str, default=False
             If True, sort by leaf count. If 'ascending' or 'descending',
             sort in specified order
@@ -150,7 +148,6 @@ class Dendrogram:
             show_leaf_counts=show_leaf_counts,
             truncate_mode=truncate_mode,
             leaf_rotation=leaf_rotation,
-            no_plot=no_plot,
             count_sort=count_sort,
             color_threshold=color_threshold,
             above_threshold_color='black'
@@ -193,9 +190,6 @@ class Dendrogram:
         plt.tight_layout()
         
         return fig, ax, dendrogram_output
-    
-    # 其他方法保持不变...
-
     
     @staticmethod
     def plot_cluster_intervals(intervals, labels, centroids=None, figsize=(8, 6), 

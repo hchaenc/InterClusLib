@@ -10,7 +10,7 @@ class IntervalParallelCoordinates:
     @staticmethod
     def visualize(intervals=None, centroids=None, labels=None, figsize=(12, 8), title="Parallel Coordinates", 
                   feature_names=None, alpha=1/6, beta=0.8, uncertainty_alpha=0.2, 
-                  centroid_alpha=0.4, use_bundling=True, use_color=True):
+                  centroid_alpha=0.4, use_bundling=True, max_samples_per_cluster=None):
         """
         Unified visualization function for parallel coordinates with curve bundling for interval data
         
@@ -28,7 +28,7 @@ class IntervalParallelCoordinates:
         :param uncertainty_alpha: Transparency of uncertainty regions, default is 0.2
         :param centroid_alpha: Transparency for centroids, default is 0.4
         :param use_bundling: Whether to use curve bundling, default is True
-        :param use_color: Whether to use color coding, default is True
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: fig, ax - matplotlib figure and axes objects
         """
         # Create figure and axis if not provided
@@ -141,11 +141,8 @@ class IntervalParallelCoordinates:
             # Create a dummy labels array if intervals is None
             labels = np.array([]) if labels is None else labels
             
-        # Generate color map
-        if use_color:
-            colors = [plt.cm.get_cmap('tab10')(i/max(1, n_clusters-1)) for i in range(n_clusters)]
-        else:
-            colors = ['steelblue'] * n_clusters
+        # Generate color map - always use colors
+        colors = [plt.cm.get_cmap('tab10')(i/max(1, n_clusters-1)) for i in range(n_clusters)]
         
         # Process centroids if provided
         if centroids is not None:
@@ -225,6 +222,11 @@ class IntervalParallelCoordinates:
                 # Skip empty clusters
                 if len(cluster_indices) == 0:
                     continue
+                
+                # Limit samples per cluster if specified
+                if max_samples_per_cluster is not None and len(cluster_indices) > max_samples_per_cluster:
+                    np.random.seed(42)  # For reproducibility
+                    cluster_indices = np.random.choice(cluster_indices, max_samples_per_cluster, replace=False)
                 
                 color = colors[idx % len(colors)]
                 
@@ -333,7 +335,7 @@ class IntervalParallelCoordinates:
                         ax.plot(curve_center[:, 0], curve_center[:, 1], color=color, alpha=0.7, linewidth=1)
                 
                 # Add legend entry for this cluster (only once per cluster)
-                if use_color and n_clusters > 1:
+                if n_clusters > 1:
                     legend_handle = plt.Line2D(
                         [0], [0], color=color, lw=2, marker='_', 
                         markersize=0, markerfacecolor=color, markeredgecolor='none',
@@ -453,7 +455,7 @@ class IntervalParallelCoordinates:
                           markeredgewidth=1.0, zorder=11)
                 
                 # Add legend entry for this centroid
-                if use_color and n_clusters > 1:
+                if n_clusters > 1:
                     centroid_handle = plt.Line2D(
                         [0], [0], color=dark_color, lw=3, 
                         marker='o', markersize=6, markeredgecolor='white',
@@ -464,7 +466,7 @@ class IntervalParallelCoordinates:
         
         # Add all legend handles
         all_handles = legend_handles + centroid_legend_handles
-        if all_handles and use_color and n_clusters > 1:
+        if all_handles and n_clusters > 1:
             ax.legend(handles=all_handles, loc='upper right', frameon=True, 
                      title="Clusters", title_fontsize=10,
                      fontsize=9, framealpha=0.7)

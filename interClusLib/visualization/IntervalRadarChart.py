@@ -8,10 +8,9 @@ class IntervalRadarChart:
     """Class for radar chart visualization of interval data"""
 
     @staticmethod
-    def visualize(intervals=None, centroids=None, labels=None, figsize=(10, 10), title=None, 
-                  feature_names=None, alpha=0.2, centroid_alpha=0.4, margin=0.1, 
-                  draw_grid=True, draw_labels=True, highlight_centroids=True, 
-                  show_outer_circle=False, max_samples_per_cluster=10):
+    def visualize(intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
+                  figsize=(10, 10), title="Interval Radar Chart", 
+                  feature_names=None, alpha=0.2, centroid_alpha=0.4, margin=0.1):
         """
         Unified visualization function for radar chart with interval data
         
@@ -21,17 +20,13 @@ class IntervalRadarChart:
         :param centroids: Centroid data with shape (n_clusters, n_dims, 2), can be None if only plotting intervals
                          The last dimension represents [lower, upper]
         :param labels: Optional, array of shape (n_samples,) for cluster labels or categories
-        :param figsize: Figure size, default is (12, 12)
+        :param figsize: Figure size, default is (10, 10)
         :param title: Figure title
         :param feature_names: List of feature names, default is None, will auto-generate names
-        :param alpha: Transparency for regular intervals, default is 0.5
-        :param centroid_alpha: Transparency for centroids, default is 0.7
+        :param alpha: Transparency for regular intervals, default is 0.2
+        :param centroid_alpha: Transparency for centroids, default is 0.4
         :param margin: Margin around axis limits as fraction of data range, default is 0.1
-        :param draw_grid: Whether to draw grid lines, default is True
-        :param draw_labels: Whether to draw feature labels, default is True
-        :param highlight_centroids: Whether to draw centroids with thicker lines, default is True
-        :param show_outer_circle: Whether to show the outer circle, default is False
-        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is 10
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: fig, ax - matplotlib figure and axes objects
         """
         # Create figure and axis if not provided
@@ -118,8 +113,8 @@ class IntervalRadarChart:
             centroid_upper = centroids[:, :, 1]
             centroid_center = (centroid_lower + centroid_upper) / 2
         
-        # Remove the default circle border if requested
-        ax.spines['polar'].set_visible(show_outer_circle)
+        # Remove the default circle border - always hidden now
+        ax.spines['polar'].set_visible(False)
         
         # Find the global min and max across all features
         global_min = np.min(all_mins)
@@ -138,89 +133,87 @@ class IntervalRadarChart:
         if global_min < 0:
             radius_offset = -global_min + buffer
         
-        # Set up grid
-        if draw_grid:
-            # Calculate levels for grid lines
-            grid_levels = 5
+        # Set up grid - always drawn now
+        # Calculate levels for grid lines
+        grid_levels = 5
+        
+        # Create grid levels that include both negative and positive values
+        if global_min < 0 and global_max > 0:
+            # Calculate reasonable grid steps
+            total_range = r_max - r_min
+            grid_step = total_range / grid_levels
             
-            # Create grid levels that include both negative and positive values
-            if global_min < 0 and global_max > 0:
-                # Calculate reasonable grid steps
-                total_range = r_max - r_min
-                grid_step = total_range / grid_levels
-                
-                # Create grid values centered around zero if possible
-                neg_levels = int(np.ceil(abs(r_min) / grid_step))
-                pos_levels = int(np.ceil(r_max / grid_step))
-                
-                # Generate grid values
-                grid_values = []
-                for i in range(-neg_levels, pos_levels + 1):
-                    val = i * grid_step
-                    if r_min <= val <= r_max:
-                        grid_values.append(val)
-                
-                # Convert to radii for plotting (shift by offset)
-                grid_radii = [val + radius_offset for val in grid_values]
+            # Create grid values centered around zero if possible
+            neg_levels = int(np.ceil(abs(r_min) / grid_step))
+            pos_levels = int(np.ceil(r_max / grid_step))
+            
+            # Generate grid values
+            grid_values = []
+            for i in range(-neg_levels, pos_levels + 1):
+                val = i * grid_step
+                if r_min <= val <= r_max:
+                    grid_values.append(val)
+            
+            # Convert to radii for plotting (shift by offset)
+            grid_radii = [val + radius_offset for val in grid_values]
+        else:
+            # If all values are negative or all positive, use regular spacing
+            grid_radii = np.linspace(r_min + radius_offset, r_max + radius_offset, grid_levels + 1)[1:]
+            grid_values = np.linspace(r_min, r_max, grid_levels + 1)[1:]
+        
+        # Draw circular grid lines - DARKER GRID LINES
+        for i, radius in enumerate(grid_radii):
+            # Draw a complete circle for each grid level - increased alpha and linewidth
+            circle = plt.Circle((0, 0), radius, transform=ax.transData._b, 
+                             fill=False, edgecolor='gray', alpha=0.3,  # Increased alpha from 0.15 to 0.3
+                             linestyle='-', linewidth=1.0)  # Increased linewidth from 0.7 to 1.0
+            ax.add_patch(circle)
+            
+            # Add labels with the actual value (not the shifted radius)
+            label_value = grid_values[i]
+            
+            # Format label based on magnitude
+            if abs(label_value) >= 1000:
+                label = f"{label_value/1000:.0f}k"
+            elif abs(label_value) >= 100:
+                label = f"{label_value:.0f}"
+            elif abs(label_value) >= 10:
+                label = f"{label_value:.1f}"
             else:
-                # If all values are negative or all positive, use regular spacing
-                grid_radii = np.linspace(r_min + radius_offset, r_max + radius_offset, grid_levels + 1)[1:]
-                grid_values = np.linspace(r_min, r_max, grid_levels + 1)[1:]
+                label = f"{label_value:.2f}"
             
-            # Draw circular grid lines - DARKER GRID LINES
-            for i, radius in enumerate(grid_radii):
-                # Draw a complete circle for each grid level - increased alpha and linewidth
-                circle = plt.Circle((0, 0), radius, transform=ax.transData._b, 
-                                 fill=False, edgecolor='gray', alpha=0.3,  # Increased alpha from 0.15 to 0.3
-                                 linestyle='-', linewidth=1.0)  # Increased linewidth from 0.7 to 1.0
-                ax.add_patch(circle)
-                
-                # Add labels with the actual value (not the shifted radius)
-                label_value = grid_values[i]
-                
-                # Format label based on magnitude
-                if abs(label_value) >= 1000:
-                    label = f"{label_value/1000:.0f}k"
-                elif abs(label_value) >= 100:
-                    label = f"{label_value:.0f}"
-                elif abs(label_value) >= 10:
-                    label = f"{label_value:.1f}"
-                else:
-                    label = f"{label_value:.2f}"
-                
-                # Darker labels with stronger background
-                ax.text(angles[0], radius, label, 
-                     color='black', fontsize=9, ha='left', va='bottom',  # Changed color to black and increased font size
-                     alpha=1.0, fontweight='bold',  # Full opacity
-                     bbox=dict(facecolor='white', alpha=0.8, pad=1, edgecolor='lightgray'))  # Added edge color
+            # Darker labels with stronger background
+            ax.text(angles[0], radius, label, 
+                 color='black', fontsize=9, ha='left', va='bottom',  # Changed color to black and increased font size
+                 alpha=1.0, fontweight='bold',  # Full opacity
+                 bbox=dict(facecolor='white', alpha=0.8, pad=1, edgecolor='lightgray'))  # Added edge color
+        
+        # Draw radial lines for each feature - DARKER LINES
+        for i in range(n_features):
+            # Draw radial lines from min radius to max radius - increased alpha and linewidth
+            ax.plot([angles[i], angles[i]], [r_min + radius_offset, r_max + radius_offset], 
+                 color='gray', alpha=0.5, linestyle='-', linewidth=1.0)  # Increased alpha from 0.25 to 0.5
             
-            # Draw radial lines for each feature - DARKER LINES
-            for i in range(n_features):
-                # Draw radial lines from min radius to max radius - increased alpha and linewidth
-                ax.plot([angles[i], angles[i]], [r_min + radius_offset, r_max + radius_offset], 
-                     color='gray', alpha=0.5, linestyle='-', linewidth=1.0)  # Increased alpha from 0.25 to 0.5
-                
-                # Improved label positioning with darker text
-                if draw_labels:
-                    angle_rad = angles[i]
-                    # Set label distance slightly beyond the maximum radius
-                    label_distance = r_max + radius_offset + buffer * 0.5
-                    
-                    # Calculate text alignment based on angle
-                    if 0 <= angle_rad < np.pi/4 or 7*np.pi/4 <= angle_rad <= 2*np.pi:
-                        ha, va = 'left', 'center'
-                    elif np.pi/4 <= angle_rad < 3*np.pi/4:
-                        ha, va = 'center', 'bottom'
-                    elif 3*np.pi/4 <= angle_rad < 5*np.pi/4:
-                        ha, va = 'right', 'center'
-                    else:
-                        ha, va = 'center', 'top'
-                    
-                    # Place label at the angle with enhanced visibility
-                    ax.text(angle_rad, label_distance, feature_names[i], 
-                         color='black', fontsize=11, fontweight='bold',  # Increased font size
-                         horizontalalignment=ha, verticalalignment=va,
-                         bbox=dict(facecolor='white', alpha=0.6, pad=2, edgecolor='none'))  # Added background
+            # Improved label positioning with darker text - always showing labels now
+            angle_rad = angles[i]
+            # Set label distance slightly beyond the maximum radius
+            label_distance = r_max + radius_offset + buffer * 0.5
+            
+            # Calculate text alignment based on angle
+            if 0 <= angle_rad < np.pi/4 or 7*np.pi/4 <= angle_rad <= 2*np.pi:
+                ha, va = 'left', 'center'
+            elif np.pi/4 <= angle_rad < 3*np.pi/4:
+                ha, va = 'center', 'bottom'
+            elif 3*np.pi/4 <= angle_rad < 5*np.pi/4:
+                ha, va = 'right', 'center'
+            else:
+                ha, va = 'center', 'top'
+            
+            # Place label at the angle with enhanced visibility
+            ax.text(angle_rad, label_distance, feature_names[i], 
+                 color='black', fontsize=11, fontweight='bold',  # Increased font size
+                 horizontalalignment=ha, verticalalignment=va,
+                 bbox=dict(facecolor='white', alpha=0.6, pad=2, edgecolor='none'))  # Added background
         
         # Draw data samples with offset for negative values
         legend_handles = []
@@ -229,8 +222,8 @@ class IntervalRadarChart:
             for idx, lab in enumerate(unique_labels):
                 cluster_indices = np.where(labels == lab)[0]
                 
-                # Limit samples per cluster to reduce visual clutter
-                if len(cluster_indices) > max_samples_per_cluster:
+                # Limit samples per cluster only if max_samples_per_cluster is specified
+                if max_samples_per_cluster is not None and len(cluster_indices) > max_samples_per_cluster:
                     np.random.seed(42)  # For reproducibility
                     cluster_indices = np.random.choice(cluster_indices, max_samples_per_cluster, replace=False)
                 
@@ -292,8 +285,8 @@ class IntervalRadarChart:
                 centroid_upper_loop = np.append(offsetted_upper, offsetted_upper[0])
                 centroid_center_loop = np.append(offsetted_center, offsetted_center[0])
                 
-                # Plot center line for centroid with high visibility - thicker line
-                line_width = 3.0 if highlight_centroids else 2.0  # Increased from 2.5/1.5 to 3.0/2.0
+                # Plot center line for centroid with high visibility - always thicker line now
+                line_width = 3.0  # Fixed thickness
                 ax.plot(angles, centroid_center_loop, color=dark_color, 
                       alpha=1.0, linewidth=line_width, zorder=8)
                 

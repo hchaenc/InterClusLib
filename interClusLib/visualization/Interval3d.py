@@ -10,7 +10,7 @@ class Interval3d:
     
     @staticmethod
     def visualize(intervals=None, centroids=None, labels=None, figsize=(8, 8), title="3D Intervals", 
-                  alpha=0.3, centroid_alpha=0.6, margin=5, feature_names=None):
+                  alpha=0.3, centroid_alpha=0.6, margin=5, feature_names=None, max_samples_per_cluster=None):
         """
         Unified visualization function for 3D intervals with optional centroids
         
@@ -28,6 +28,7 @@ class Interval3d:
         :param centroid_alpha: Transparency for centroids, default is 0.6
         :param margin: Margin around axis limits, default is 5
         :param feature_names: List of feature names, default is None, will auto-generate ["x1", "x2", "x3"]
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: fig, ax - matplotlib figure and axes objects
         """
         # Validate input: at least one of intervals or centroids must be provided
@@ -41,7 +42,9 @@ class Interval3d:
         interval_legend_handles = []
         if intervals is not None:
             processed_intervals = Interval3d._process_intervals(intervals)
-            interval_legend_handles = Interval3d.draw_3d_intervals(ax, processed_intervals, labels, alpha=alpha)
+            interval_legend_handles = Interval3d.draw_3d_intervals(ax, processed_intervals, labels, 
+                                                                  alpha=alpha, 
+                                                                  max_samples_per_cluster=max_samples_per_cluster)
         else:
             processed_intervals = None
             
@@ -227,7 +230,7 @@ class Interval3d:
         return faces
 
     @staticmethod
-    def draw_3d_intervals(ax, intervals, labels=None, alpha=0.3, line_width=1):
+    def draw_3d_intervals(ax, intervals, labels=None, alpha=0.3, line_width=1, max_samples_per_cluster=None):
         """
         Draw each 3D interval (x_lower, x_upper; y_lower, y_upper; z_lower, z_upper)
         as a cuboid in the given 3D axes 'ax'.
@@ -238,6 +241,7 @@ class Interval3d:
         :param labels: Optional, shape (n_samples,) - cluster or category labels
         :param alpha: Transparency, default is 0.3
         :param line_width: Line width, default is 1
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: List of legend handles
         """
         # Check data structure
@@ -254,6 +258,19 @@ class Interval3d:
 
             for idx, lab in enumerate(unique_labels):
                 mask = (labels == lab)
+                cluster_indices = np.where(mask)[0]
+                
+                # Skip empty clusters
+                if len(cluster_indices) == 0:
+                    continue
+                
+                # Limit samples per cluster if specified
+                if max_samples_per_cluster is not None and len(cluster_indices) > max_samples_per_cluster:
+                    np.random.seed(42)  # For reproducibility
+                    selected_indices = np.random.choice(cluster_indices, max_samples_per_cluster, replace=False)
+                    mask = np.zeros_like(mask)
+                    mask[selected_indices] = True
+                
                 sub_intervals = intervals[mask]
                 color = cmap(idx)
 
@@ -286,8 +303,18 @@ class Interval3d:
                 legend_handles.append(legend_handle)
 
         else:
+            # No labels, all intervals use the same color
             color = "blue"
-            for interval3d in intervals:
+            
+            # If max_samples_per_cluster is specified, limit the number of intervals displayed
+            if max_samples_per_cluster is not None and len(intervals) > max_samples_per_cluster:
+                np.random.seed(42)  # For reproducibility
+                selected_indices = np.random.choice(len(intervals), max_samples_per_cluster, replace=False)
+                intervals_to_draw = intervals[selected_indices]
+            else:
+                intervals_to_draw = intervals
+                
+            for interval3d in intervals_to_draw:
                 x_lower, x_upper = interval3d[0, 0], interval3d[0, 1]
                 y_lower, y_upper = interval3d[1, 0], interval3d[1, 1]
                 z_lower, z_upper = interval3d[2, 0], interval3d[2, 1]
