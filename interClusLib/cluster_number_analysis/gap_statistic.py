@@ -135,7 +135,7 @@ class GapStatistic(ClusterEvaluationMethod):
         
         return gap_stats, ref_log_dispersions
     
-    def plot_gap(self, figsize=(12, 6)):
+    def plot_gap(self, figsize=(10, 6)):
         """
         Plot Gap Statistic graph
         

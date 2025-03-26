@@ -240,7 +240,7 @@ class IntervalAgglomerativeClustering:
         }
 
     def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                                    metrics=['distortion'], distance_func=None, 
+                                    metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], distance_func=None, 
                                     linkage=None):
         """
         Compute evaluation metrics for a range of cluster numbers for hierarchical clustering.
@@ -300,8 +300,9 @@ class IntervalAgglomerativeClustering:
                 condensed_dist.append(dist_matrix[i, j])
         
         # Compute linkage matrix using SciPy
+        from scipy.cluster.hierarchy import linkage as scipy_linkage
         scipy_method = self._linkage_map[linkage]
-        linkage_matrix = linkage(condensed_dist, method=scipy_method, metric='precomputed')
+        linkage_matrix = scipy_linkage(condensed_dist, method=scipy_method, metric='precomputed')
         
         # Compute metrics for each k value
         for k in range(min_clusters, max_clusters + 1):
@@ -336,3 +337,27 @@ class IntervalAgglomerativeClustering:
                 print(f"Error computing metrics for k={k}: {e}")
         
         return results
+    
+    def cluster_and_return(self, data, k):
+        """
+        对数据运行层次聚类并返回标签和中心点
+        
+        Parameters:
+        -----------
+        data : array-like
+            形状为(n_samples, n_dims, 2)的区间数据
+        k : int
+            聚类数量
+            
+        Returns:
+        --------
+        tuple
+            (labels, centroids) - 聚类标签和中心点
+        """
+        model = IntervalAgglomerativeClustering(
+            n_clusters=k,
+            linkage=self.linkage,
+            distance_func=self.distance_func
+        )
+        model.fit(data)
+        return model.labels_, model.centroids_

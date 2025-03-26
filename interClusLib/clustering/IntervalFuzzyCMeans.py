@@ -62,6 +62,7 @@ class IntervalFuzzyCMeans:
         self.max_iter = max_iter
         self.tol = tol
         self.adaptive_weights = adaptive_weights
+        self.distance_func = distance_func
 
         self.U = None
         self.centers_a = None  # shape (n_clusters, n_dims)
@@ -360,7 +361,7 @@ class IntervalFuzzyCMeans:
         return crisp_labels
     
     def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                           metrics=['distortion'], distance_func=None, 
+                           metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], distance_func=None, 
                            m=None, max_iter=None, tol=None, 
                            adaptive_weights=None, random_state=None, 
                            n_init=1):
@@ -471,3 +472,31 @@ class IntervalFuzzyCMeans:
                     print(f"Error calculating {metric} for k={k}: {e}")
         
         return results
+    
+    def cluster_and_return(self, data, k):
+        """
+        对数据运行模糊C均值聚类并返回标签和中心点
+        
+        Parameters:
+        -----------
+        data : array-like
+            形状为(n_samples, n_dims, 2)的区间数据
+        k : int
+            聚类数量
+            
+        Returns:
+        --------
+        tuple
+            (labels, centroids) - 聚类标签和中心点
+        """
+        model = IntervalFuzzyCMeans(
+            n_clusters=k,
+            m=self.m,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            adaptive_weights=self.adaptive_weights,
+            distance_func=self.distance_func
+        )
+        model.fit(data)
+        # 对于模糊聚类，返回硬聚类结果（每个样本分配到最高隶属度的簇）
+        return model.get_crisp_assignments(), model.centroids_

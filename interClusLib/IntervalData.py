@@ -145,8 +145,8 @@ class IntervalData:
         data = {}
         # create a dataset with each column consisting of the interval start and end
         for i in range(m):
-            data[f"feature_{i+1}_lower"] = interval_start[:, i]
-            data[f"feature_{i+1}_upper"] = interval_end[:, i]
+            data[f"Feature_{i+1}_lower"] = interval_start[:, i]
+            data[f"Feature_{i+1}_upper"] = interval_end[:, i]
 
         return cls(pd.DataFrame(data))
         
@@ -251,8 +251,8 @@ class IntervalData:
         # 4) build the DataFrame
         df_data = {}
         for i in range(n_dims):
-            df_data[f"feature_{i+1}_lower"] = intervals[:, i, 0]
-            df_data[f"feature_{i+1}_upper"] = intervals[:, i, 1]
+            df_data[f"Feature_{i+1}_lower"] = intervals[:, i, 0]
+            df_data[f"Feature_{i+1}_upper"] = intervals[:, i, 1]
 
         df = pd.DataFrame(df_data)
         return cls(df)

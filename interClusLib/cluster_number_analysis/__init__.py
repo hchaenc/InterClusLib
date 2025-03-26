@@ -23,5 +23,4 @@ __all__ = [
     'LMethod',
     'GapStatistic',
     'MaxMinClusterEvaluator',
-    'MultiMethodEvaluator'
 ]

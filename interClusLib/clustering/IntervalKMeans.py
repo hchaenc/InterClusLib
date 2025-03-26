@@ -9,7 +9,7 @@ class IntervalKMeans:
     A custom K-Means clustering for interval data
     """
 
-    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, distance_func='euclidean', random_state=42):
+    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, distance_func='euclidean', random_state=42):    
         """
         :param n_clusters: number of clusters
         :param max_iter: maximum number of iterations
@@ -20,9 +20,17 @@ class IntervalKMeans:
         self.n_clusters = n_clusters
         self.max_iter = max_iter
         self.tol = tol
-        self.random_state = np.random.RandomState(random_state)
         self.train_data = None
         self.isSim = None
+        if isinstance(random_state, np.random.RandomState):
+            self.random_state = random_state
+        else:
+            try:
+                self.random_state = np.random.RandomState(random_state)
+            except:
+                # 如果转换失败，使用默认种子
+                print(f"Warning: Could not use random_state={random_state}, using default seed 42 instead")
+                self.random_state = np.random.RandomState(42)
         
         # 保存原始的distance_func名称，用于创建新实例时使用
         self.distance_func_name = distance_func if isinstance(distance_func, str) else 'custom'
@@ -113,7 +121,7 @@ class IntervalKMeans:
         return self.labels_
 
     def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                               metrics=['distortion'], distance_func=None, 
+                               metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], distance_func=None, 
                                max_iter=None, tol=None, random_state=None, 
                                n_init=1):
         """
@@ -219,3 +227,29 @@ class IntervalKMeans:
                     print(f"Error calculating {metric} for k={k}: {e}")
         
         return results
+
+    def cluster_and_return(self, data, k):
+        """
+        对数据运行区间聚类并返回标签和中心点
+        
+        Parameters:
+        -----------
+        data : array-like
+            形状为(n_samples, n_dims, 2)的区间数据
+        k : int, optional
+            聚类数量，如果为None则使用初始化时设置的n_clusters
+            
+        Returns:
+        --------
+        tuple
+            (labels, centroids) - 聚类标签和中心点
+        """
+        model = IntervalKMeans(
+            n_clusters=k,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            distance_func=self.distance_func_name,
+            random_state=self.random_state
+        )
+        model.fit(data)
+        return model.labels_, model.centroids_

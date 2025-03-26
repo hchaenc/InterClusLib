@@ -35,9 +35,11 @@ class ClusterEvaluationMethod(ABC):
         """
         # Convert input data format
         if isinstance(eval_data, dict):
-            data = np.array([(k, v) for k, v in sorted(eval_data.items())])
+            # 确保键被转换为整数
+            data = np.array([(int(k), float(v)) for k, v in sorted(eval_data.items(), key=lambda x: int(x[0]))])
         else:
-            data = np.array(eval_data)
+            # 确保数据的第一列（聚类数）是整数类型
+            data = np.array(eval_data, dtype=float)
             
         # Ensure data is sorted by cluster number
         data = data[data[:, 0].argsort()]
