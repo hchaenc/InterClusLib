@@ -55,19 +55,5 @@ def fix_inverted_intervals(interval_data, method='swap', inverted_mask=None):
             temp = fixed_data[inverted_idx, d, 0].copy()
             fixed_data[inverted_idx, d, 0] = fixed_data[inverted_idx, d, 1]
             fixed_data[inverted_idx, d, 1] = temp
-            
-        elif method == 'mean':
-            # Replace both bounds with their mean
-            mean_value = (interval_data[inverted_idx, d, 0] + interval_data[inverted_idx, d, 1]) / 2
-            # Small offset to maintain proper interval structure
-            fixed_data[inverted_idx, d, 0] = mean_value - 1e-6  
-            fixed_data[inverted_idx, d, 1] = mean_value + 1e-6
-            
-        elif method == 'min_max':
-            # Use smaller value as lower bound, larger as upper bound
-            lower = np.minimum(interval_data[inverted_idx, d, 0], interval_data[inverted_idx, d, 1])
-            upper = np.maximum(interval_data[inverted_idx, d, 0], interval_data[inverted_idx, d, 1])
-            fixed_data[inverted_idx, d, 0] = lower
-            fixed_data[inverted_idx, d, 1] = upper
     
     return fixed_data, inverted_mask
