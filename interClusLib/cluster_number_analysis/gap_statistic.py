@@ -1,5 +1,5 @@
 """
-Gap Statistic implementation module
+Gap Statistic implementation module with modified optimal k selection
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -74,15 +74,25 @@ class GapStatistic(ClusterEvaluationMethod):
         # Calculate standard deviation and error
         sdk = np.std(self.ref_dispersions, axis=0) * np.sqrt(1 + 1/self.n_refs)
         
-        # Find the smallest k that satisfies Gap(k) ≥ Gap(k+1) - sk+1
-        for i in range(len(k_values)-1):
-            if self.gap_stats[i] >= self.gap_stats[i+1] - sdk[i+1]:
-                self.optimal_k = k_values[i]
-                break
-        else:
-            self.optimal_k = k_values[-1]
+        # Modified approach for selecting optimal k
+        # Method 1: Select k where the gap statistic first shows a significant increase
+        # (Looking for the "elbow" in the gap statistic curve)
+        gap_increases = np.diff(self.gap_stats)
+        significant_increases = np.where(gap_increases > np.mean(gap_increases) + np.std(gap_increases))[0]
         
-        self.eval_results = data
+        if len(significant_increases) > 0:
+            # First significant jump in gap statistic 
+            # Add 1 because diff reduces the array length by 1 and we want the k after the jump
+            self.optimal_k = k_values[significant_increases[0] + 1]
+        else:
+            # Fallback to original method if no significant jumps
+            for i in range(len(k_values)-1):
+                if self.gap_stats[i] >= self.gap_stats[i+1] - sdk[i+1]:
+                    self.optimal_k = k_values[i]
+                    break
+            else:
+                self.optimal_k = k_values[-1]
+        
         return self.optimal_k
     
     def _compute_gap_statistic(self, data, k_values, cluster_func):
@@ -158,6 +168,19 @@ class GapStatistic(ClusterEvaluationMethod):
         plt.errorbar(k_values, self.gap_stats, yerr=sdk, fmt='o-', capsize=5)
         plt.axvline(x=self.optimal_k, color='red', linestyle='--', 
                   label=f'Optimal k={self.optimal_k}')
+        
+        # Add annotations for significant jumps in gap statistic
+        if len(k_values) > 1:
+            gap_increases = np.diff(self.gap_stats)
+            for i in range(len(gap_increases)):
+                plt.annotate(f'+{gap_increases[i]:.2f}', 
+                           xy=((k_values[i] + k_values[i+1])/2, 
+                               (self.gap_stats[i] + self.gap_stats[i+1])/2),
+                           xytext=(0, 10),
+                           textcoords='offset points',
+                           ha='center',
+                           fontsize=8)
+        
         plt.grid(True, alpha=0.3)
         plt.xlabel('Number of Clusters')
         plt.ylabel('Gap Statistic')

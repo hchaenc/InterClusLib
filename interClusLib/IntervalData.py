@@ -152,7 +152,7 @@ class IntervalData:
         
     @classmethod
     def make_interval_blobs(cls,
-                     n_samples=1000,
+                     n_samples=100,
                      n_clusters=3,
                      n_dims=2,
                      cluster_centers=None,

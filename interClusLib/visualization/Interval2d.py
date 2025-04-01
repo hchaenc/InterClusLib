@@ -90,18 +90,20 @@ class Interval2d:
                 )
                 ax.add_patch(rect)
                 
-                # Add marker at centroid center
-                center_x = x_lower + width/2
-                center_y = y_lower + height/2
-                ax.scatter([center_x], [center_y], 
-                          color=dark_color, s=100, edgecolor='white', linewidth=1, zorder=11)
+                # REMOVED: Center point marker
+                # The following code has been removed:
+                # # Add marker at centroid center
+                # center_x = x_lower + width/2
+                # center_y = y_lower + height/2
+                # ax.scatter([center_x], [center_y], 
+                #           color=dark_color, s=100, edgecolor='white', linewidth=1, zorder=11)
                 
                 # Create legend handle for this centroid
                 label = f"Centroid {i+1}"
                 
+                # Modified to remove center point from legend representation
                 centroid_handle = plt.Line2D(
-                    [0], [0], color=dark_color, marker='o', 
-                    markersize=10, markeredgecolor='white', markeredgewidth=2,
+                    [0], [0], color=dark_color,
                     linestyle='-', linewidth=3, label=label
                 )
                 centroid_legend_handles.append(centroid_handle)

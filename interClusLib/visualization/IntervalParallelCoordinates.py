@@ -215,6 +215,9 @@ class IntervalParallelCoordinates:
         # Draw data lines and uncertainty regions if data is provided
         legend_handles = []
         if intervals is not None:
+            # Check if we're in the case where there are no labels and no centroids
+            no_labels_or_centroids = labels is None or np.all(labels == 0) and centroids is None
+            
             for idx, lab in enumerate(unique_labels):
                 cluster_mask = labels == lab
                 cluster_indices = np.where(cluster_mask)[0]
@@ -331,8 +334,15 @@ class IntervalParallelCoordinates:
                         poly = mpatches.Polygon(verts, closed=True, facecolor=color, alpha=uncertainty_alpha)
                         ax.add_patch(poly)
                         
-                        # Draw center line
-                        ax.plot(curve_center[:, 0], curve_center[:, 1], color=color, alpha=0.7, linewidth=1)
+                        # Draw center line with deeper color when no labels or centroids are provided
+                        if no_labels_or_centroids:
+                            # Create a darker version of the color for the center line
+                            darker_color = np.array(color)
+                            darker_color[:3] = darker_color[:3] * 0.7  # Make it 40% darker
+                            ax.plot(curve_center[:, 0], curve_center[:, 1], color=darker_color, alpha=1.0, linewidth=1.5)
+                        else:
+                            # Use original color with lower alpha
+                            ax.plot(curve_center[:, 0], curve_center[:, 1], color=color, alpha=0.7, linewidth=1)
                 
                 # Add legend entry for this cluster (only once per cluster)
                 if n_clusters > 1:
