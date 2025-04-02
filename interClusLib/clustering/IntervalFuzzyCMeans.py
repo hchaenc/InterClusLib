@@ -407,7 +407,7 @@ class IntervalFuzzyCMeans:
                 raise ValueError(f"Unknown metric: {metric}. Available options: {list(EVALUATION.keys())}")
         
         # Use current instance parameters if not specified
-        distance_func = distance_func or self.distance_function.__name__ if hasattr(self.distance_function, '__name__') else self.distance_func_name if hasattr(self, 'distance_func_name') else 'euclidean'
+        distance_func = distance_func or self.distance_func
         m = m or self.m
         max_iter = max_iter or self.max_iter
         tol = tol or self.tol
