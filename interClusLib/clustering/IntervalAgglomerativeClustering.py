@@ -2,8 +2,9 @@ import numpy as np
 from warnings import warn
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, fcluster, dendrogram as scipy_dendrogram
+from interClusLib.clustering.AbstractIntervalClustering import AbstractIntervalClustering
 
-class IntervalAgglomerativeClustering:
+class IntervalAgglomerativeClustering(AbstractIntervalClustering):
     """
     An Agglomerative (Hierarchical) Clustering for interval data (n_dims, 2).
     Uses SciPy's linkage function to ensure correct hierarchical clustering structure.
@@ -11,11 +12,6 @@ class IntervalAgglomerativeClustering:
     Interval data is structured as arrays with shape (n_samples, n_dims, 2),
     where the last dimension represents the lower and upper bounds of each interval.
     """
-    # Available distance metrics for interval data
-    distance_funcs = {"hausdorff", "euclidean", "manhattan"}
-    # Available similarity metrics for interval data
-    similarity_funcs = {"jaccard", "dice", "bidirectional_min", "bidirectional_prod", "marginal"}
-    
     # Mapping from our linkage names to SciPy's linkage method names
     _linkage_map = {
         'single': 'single',
@@ -24,7 +20,7 @@ class IntervalAgglomerativeClustering:
         'ward': 'ward'
     }
 
-    def __init__(self, n_clusters=2, linkage='average', distance_func='euclidean'):
+    def __init__(self, n_clusters=2, linkage='average', distance_func='euclidean', is_similarity=None, **kwargs):
         """
         Initialize the interval clustering algorithm.
         
@@ -34,35 +30,28 @@ class IntervalAgglomerativeClustering:
             Number of clusters to find.
         linkage: str, default='average'
             Linkage criterion ('complete', 'average', 'single', 'ward').
-        distance_func: str, default='euclidean'
-            Name of the distance/similarity function to use.
-            Can be one of the distance_funcs or similarity_funcs.
-        metric: str, default='precomputed'
-            How to interpret the input data. Currently only 'precomputed' is supported.
+        distance_func: str or callable, default='euclidean'
+            Name of the distance/similarity function to use or a custom function.
+            If using a predefined function, it can be from the distance_funcs or similarity_funcs.
+        is_similarity: bool, default=None
+            If providing a custom distance_func, set to True if it's a similarity function,
+            False if it's a distance function. Ignored if distance_func is a string.
+        **kwargs: dict
+            Additional parameters to pass to the parent class.
         """
         if linkage not in self._linkage_map:
             raise ValueError(f"Unsupported linkage method: {linkage}. "
                            f"Supported methods are: {list(self._linkage_map.keys())}")
         
-        self.n_clusters = n_clusters
-        self.linkage = linkage
-        self.distance_func = distance_func
+        # Call parent class constructor with appropriate parameters
+        super().__init__(n_clusters=n_clusters, distance_func=distance_func, is_similarity=is_similarity, **kwargs)
         
-        # Will be set during fitting
-        self.labels_ = None
+        self.linkage = linkage
+        
+        # Additional attributes for hierarchical clustering
         self.n_samples_ = None
         self.linkage_matrix_ = None
-        self.centroids_ = None
-        self.train_data = None
 
-        # Determine if the metric is a similarity or distance function
-        if self.distance_func in self.distance_funcs:
-            self.isSim = False
-        elif self.distance_func in self.similarity_funcs:
-            self.isSim = True
-        else:
-            raise ValueError(f"Unsupported metric: {self.distance_func}")
-    
     def compute_distance_matrix(self, intervals):
         """
         Compute the pairwise distance/similarity matrix for interval data.
@@ -83,7 +72,7 @@ class IntervalAgglomerativeClustering:
             from interClusLib.metric import pairwise_similarity
             dist_matrix = pairwise_similarity(
                 intervals, 
-                metric=self.distance_func
+                metric=self.distance_function if callable(self.distance_func) else self.distance_func
             )
             dist_matrix = 1 - dist_matrix  # Convert similarity to distance
         else:
@@ -91,7 +80,7 @@ class IntervalAgglomerativeClustering:
             from interClusLib.metric import pairwise_distance
             dist_matrix = pairwise_distance(
                 intervals, 
-                metric=self.distance_func
+                metric=self.distance_function if callable(self.distance_func) else self.distance_func
             )
         
         return dist_matrix
@@ -195,24 +184,6 @@ class IntervalAgglomerativeClustering:
         
         return self
 
-    def get_labels(self):
-        """
-        Get the cluster labels for the training data.
-        
-        Returns:
-        --------
-        numpy.ndarray
-            Cluster labels with shape (n_samples,)
-            
-        Raises:
-        -------
-        RuntimeError
-            If the model has not been fitted yet.
-        """
-        if self.labels_ is None:
-            raise RuntimeError("Model not fitted yet.")
-        return self.labels_
-
     def get_dendrogram_data(self):
         """
         Get the necessary data for plotting a dendrogram.
@@ -240,8 +211,8 @@ class IntervalAgglomerativeClustering:
         }
 
     def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                                    metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], distance_func=None, 
-                                    linkage=None):
+                                    metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], 
+                                    distance_func=None, linkage=None, **kwargs):
         """
         Compute evaluation metrics for a range of cluster numbers for hierarchical clustering.
         This is useful for determining the optimal number of clusters.
@@ -254,12 +225,14 @@ class IntervalAgglomerativeClustering:
             Minimum number of clusters to evaluate
         max_clusters: int, default=10
             Maximum number of clusters to evaluate
-        metrics: list of str, default=['distortion']
+        metrics: list of str, default=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn']
             Metrics to compute, can be any key from the EVALUATION dictionary
-        distance_func: str, default=None
-            Distance function name. If None, uses the current instance's distance function.
+        distance_func: str or callable, default=None
+            Distance function name or callable. If None, uses the current instance's distance function.
         linkage: str, default=None
             Linkage criterion. If None, uses the current instance's linkage.
+        **kwargs: dict
+            Additional parameters (not used but included for compatibility with ABC)
         
         Returns:
         --------
@@ -281,16 +254,25 @@ class IntervalAgglomerativeClustering:
         # Initialize results dictionary
         results = {metric: {} for metric in metrics}
         
-        # Compute linkage matrix once for efficiency
-        # We only need to compute it once and then can cut the tree at different levels
+        # Check if distance_func is a callable
+        distance_metric = distance_func
+        if callable(distance_func):
+            # For custom function, we'll use it directly with compute_distance_matrix
+            is_similarity = kwargs.get('is_similarity', self.isSim if hasattr(self, 'isSim') else False)
+        else:
+            # For predefined function names
+            if distance_func in self.distance_funcs:
+                is_similarity = False
+            elif distance_func in self.similarity_funcs:
+                is_similarity = True
+            else:
+                valid_funcs = ", ".join(list(self.similarity_funcs) + list(self.distance_funcs))
+                raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
         
         # Compute the distance matrix
-        if self.isSim:
-            from interClusLib.metric import pairwise_similarity
-            dist_matrix = 1 - pairwise_similarity(intervals, metric=distance_func)
-        else:
-            from interClusLib.metric import pairwise_distance
-            dist_matrix = pairwise_distance(intervals, metric=distance_func)
+        # Create a temporary instance to use compute_distance_matrix
+        temp_instance = self.__class__(n_clusters=2, linkage=linkage, distance_func=distance_func)
+        dist_matrix = temp_instance.compute_distance_matrix(intervals)
         
         # Prepare condensed distance matrix for SciPy
         n_samples = intervals.shape[0]
@@ -300,9 +282,8 @@ class IntervalAgglomerativeClustering:
                 condensed_dist.append(dist_matrix[i, j])
         
         # Compute linkage matrix using SciPy
-        from scipy.cluster.hierarchy import linkage as scipy_linkage
         scipy_method = self._linkage_map[linkage]
-        linkage_matrix = scipy_linkage(condensed_dist, method=scipy_method, metric='precomputed')
+        linkage_matrix = linkage(condensed_dist, method=scipy_method, metric='precomputed')
         
         # Compute metrics for each k value
         for k in range(min_clusters, max_clusters + 1):
@@ -328,7 +309,7 @@ class IntervalAgglomerativeClustering:
                             data=intervals,
                             labels=labels,
                             centers=centroids,
-                            metric=distance_func
+                            metric=distance_metric
                         )
                         results[metric_name][k] = metric_value
                     except Exception as e:
@@ -340,24 +321,25 @@ class IntervalAgglomerativeClustering:
     
     def cluster_and_return(self, data, k):
         """
-        对数据运行层次聚类并返回标签和中心点
+        Run hierarchical clustering on data and return labels and centroids.
         
         Parameters:
         -----------
-        data : array-like
-            形状为(n_samples, n_dims, 2)的区间数据
+        data : ndarray
+            Interval data with shape (n_samples, n_dims, 2)
         k : int
-            聚类数量
+            Number of clusters
             
         Returns:
-        --------
+        -------
         tuple
-            (labels, centroids) - 聚类标签和中心点
+            (labels, centroids) - Cluster labels and centroids
         """
-        model = IntervalAgglomerativeClustering(
+        model = self.__class__(
             n_clusters=k,
             linkage=self.linkage,
-            distance_func=self.distance_func
+            distance_func=self.distance_func,
+            is_similarity=self.isSim if hasattr(self, 'isSim') else None
         )
         model.fit(data)
         return model.labels_, model.centroids_

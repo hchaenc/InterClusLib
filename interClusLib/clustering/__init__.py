@@ -14,9 +14,11 @@ Available algorithms:
 from .IntervalKMeans import IntervalKMeans
 from .IntervalFuzzyCMeans import IntervalFuzzyCMeans
 from .IntervalAgglomerativeClustering import IntervalAgglomerativeClustering
+from .AbstractIntervalClustering import AbstractIntervalClustering
 
 __all__ = [
     'IntervalKMeans',
     'IntervalFuzzyCMeans',
     'IntervalAgglomerativeClustering',
+    'AbstractIntervalClustering'
 ]

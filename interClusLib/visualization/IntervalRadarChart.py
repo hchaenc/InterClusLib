@@ -3,14 +3,15 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib as mpl
 from matplotlib.colors import to_rgba
+from interClusLib.visualization.IntervalVisualization import IntervalVisualization
 
-class IntervalRadarChart:
+class IntervalRadarChart(IntervalVisualization):
     """Class for radar chart visualization of interval data"""
 
-    @staticmethod
-    def visualize(intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
-                  figsize=(10, 10), title="Radar Chart Visualization", 
-                  feature_names=None, alpha=0.2, centroid_alpha=0.4, margin=0.1):
+    @classmethod
+    def visualize(cls, intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
+                  figsize=(8, 8), title="Radar Chart Visualization", 
+                  feature_names=None, alpha=0.2, centroid_alpha=0.4, margin=0.1, **kwargs):
         """
         Unified visualization function for radar chart with interval data.
         Each feature axis uses its own independent scale.
@@ -21,104 +22,59 @@ class IntervalRadarChart:
         :param centroids: Centroid data with shape (n_clusters, n_dims, 2), can be None if only plotting intervals
                          The last dimension represents [lower, upper]
         :param labels: Optional, array of shape (n_samples,) for cluster labels or categories
-        :param figsize: Figure size, default is (10, 10)
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
+        :param figsize: Figure size, default is (8, 8)
         :param title: Figure title
         :param feature_names: List of feature names, default is None, will auto-generate names
         :param alpha: Transparency for regular intervals, default is 0.2
         :param centroid_alpha: Transparency for centroids, default is 0.4
         :param margin: Margin around axis limits as fraction of data range, default is 0.1
-        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
+        :param kwargs: Additional parameters specific to this visualization
         :return: fig, ax - matplotlib figure and axes objects
         """
-        # Create figure and axis if not provided
+        # Create figure and axis
         fig = plt.figure(figsize=figsize)
-        
-        # Create the main radar plot with slightly reduced height to make room for title
         ax = fig.add_subplot(111, polar=True)
         
         # Add padding at the top to create more space between title and plot
         plt.subplots_adjust(top=0.85)
             
-        # Ensure either data or centroids (or both) are provided
+        # Validate input: at least one of intervals or centroids must be provided
         if intervals is None and centroids is None:
             raise ValueError("At least one of 'intervals' or 'centroids' must be provided")
             
-        # Determine the number of features
+        # Validate data format if provided
         if intervals is not None:
-            # Validate intervals shape
-            if intervals.ndim != 3 or intervals.shape[2] != 2:
-                raise ValueError(
-                    f"Expected intervals to have shape (n_samples, n_dims, 2). "
-                    f"Got {intervals.shape} instead."
-                )
+            cls.validate_intervals(intervals)
             n_samples, n_features = intervals.shape[0], intervals.shape[1]
         else:
-            # Validate centroids shape
-            if centroids.ndim != 3 or centroids.shape[2] != 2:
-                raise ValueError(
-                    f"Expected centroids to have shape (n_clusters, n_dims, 2). "
-                    f"Got {centroids.shape} instead."
-                )
+            cls.validate_centroids(centroids)
             n_features = centroids.shape[1]
             n_samples = 0
         
-        # Auto-generate feature names if needed
-        if feature_names is None:
-            feature_names = [f"Feature_{i+1}" for i in range(n_features)]
-        elif len(feature_names) < n_features:
-            # Extend feature names if fewer than n_features are provided
-            feature_names = list(feature_names) + [f"Feature_{i+1}" for i in range(len(feature_names), n_features)]
+        # Generate feature names
+        feature_names = cls.generate_feature_names(n_features, feature_names)
         
         # Setup the angles for the radar chart (equally spaced)
         angles = np.linspace(0, 2*np.pi, n_features, endpoint=False).tolist()
         # Close the loop for plotting
         angles.append(angles[0])
         
-        # Extract data - using original values without normalization
+        # Get feature boundaries for scaling
+        feature_mins, feature_maxs = cls.get_feature_boundaries(intervals, centroids, margin)
+        
+        # Set up cluster information
+        labels, unique_labels, n_clusters = cls.setup_cluster_info(intervals, labels, centroids)
+            
+        # Generate colors for clusters
+        cluster_colors = cls.generate_cluster_colors(n_clusters)
+        
+        # Extract data if provided
         if intervals is not None:
             data_lower = intervals[:, :, 0]
             data_upper = intervals[:, :, 1]
             data_center = (data_lower + data_upper) / 2
             
-            # Find min/max values per feature
-            feature_mins = np.min(data_lower, axis=0)
-            feature_maxs = np.max(data_upper, axis=0)
-        else:
-            feature_mins = np.min(centroids[:, :, 0], axis=0)
-            feature_maxs = np.max(centroids[:, :, 1], axis=0)
-            
-        # Update min/max with centroids if available
-        if centroids is not None and intervals is not None:
-            centroid_mins = np.min(centroids[:, :, 0], axis=0)
-            centroid_maxs = np.max(centroids[:, :, 1], axis=0)
-            feature_mins = np.minimum(feature_mins, centroid_mins)
-            feature_maxs = np.maximum(feature_maxs, centroid_maxs)
-        
-        # Calculate range for each feature and add margin
-        feature_ranges = feature_maxs - feature_mins
-        feature_ranges[feature_ranges == 0] = 1.0  # Avoid division by zero for constant features
-        
-        # Add margin to the min/max values
-        margin_values = feature_ranges * margin
-        feature_mins -= margin_values
-        feature_maxs += margin_values
-        
-        # Set up cluster information
-        if intervals is not None:
-            if labels is None:
-                labels = np.zeros(n_samples, dtype=int)
-            unique_labels = np.unique(labels)
-            n_clusters = len(unique_labels)
-        elif centroids is not None:
-            n_clusters = centroids.shape[0]
-            unique_labels = np.arange(n_clusters)
-            # Create a dummy labels array if intervals is None
-            labels = np.array([]) if labels is None else labels
-            
-        # Generate distinct colors for clusters
-        colors = plt.cm.get_cmap('tab10', n_clusters)
-        cluster_colors = [colors(i) for i in range(n_clusters)]
-        
         # Process centroids if provided
         if centroids is not None:
             if centroids.shape[1] != n_features:
@@ -128,16 +84,12 @@ class IntervalRadarChart:
             centroid_upper = centroids[:, :, 1]
             centroid_center = (centroid_lower + centroid_upper) / 2
         
-        # Remove the default circle border - always hidden now
+        # Remove the default circle border
         ax.spines['polar'].set_visible(False)
         
-        # Define a fixed radius scale for plotting (0 to 1)
-        r_min = 0
-        r_max = 1
-        
-        # Draw circular grid lines - LIGHTER GRID LINES
+        # Draw circular grid lines
         grid_levels = 5
-        grid_radii = np.linspace(r_min, r_max, grid_levels + 1)[1:]  # Skip the first (center point)
+        grid_radii = np.linspace(0, 1, grid_levels + 1)[1:]  # Skip the first (center point)
         
         for i, radius in enumerate(grid_radii):
             # Draw a complete circle for each grid level
@@ -149,17 +101,16 @@ class IntervalRadarChart:
         # Draw radial lines for each feature with scale labels
         for i in range(n_features):
             # Draw radial line from center to edge
-            ax.plot([angles[i], angles[i]], [r_min, r_max], 
+            ax.plot([angles[i], angles[i]], [0, 1], 
                  color='gray', alpha=0.4, linestyle='-', linewidth=0.8)
             
             # Calculate positions for the tick marks along this radial line
-            # Include both min and max, plus intermediate ticks
-            tick_positions = np.linspace(r_min, r_max, grid_levels + 1)
+            tick_positions = np.linspace(0, 1, grid_levels + 1)
             
             # Calculate corresponding feature values at these positions
             feature_values = feature_mins[i] + (feature_maxs[i] - feature_mins[i]) * tick_positions
             
-            # Place tick labels along the radial line (including min value at center)
+            # Place tick labels along the radial line
             for j, (radius, value) in enumerate(zip(tick_positions, feature_values)):
                 # Only show min value (at j=0) and max value (j=len-1), plus one intermediate tick
                 if j == 0 or j == len(tick_positions)-1 or j == 2:
@@ -195,14 +146,14 @@ class IntervalRadarChart:
                         else:
                             ha, va = 'center', 'top'
                         
-                        # Make labels larger and more visible with bold font - no background
+                        # Make labels larger and more visible with bold font
                         ax.text(label_angle + dx, radius + dy, label, 
                              color='black', fontsize=12, fontweight='bold',
                              ha=ha, va=va, alpha=1.0)
             
             # Place feature name label closer to the chart edge
             angle_rad = angles[i]
-            label_distance = r_max + 0.15  # Reduced distance for feature names
+            label_distance = 1.15  # Reduced distance for feature names
             
             # Calculate text alignment based on angle
             if 0 <= angle_rad < np.pi/4 or 7*np.pi/4 <= angle_rad <= 2*np.pi:
@@ -214,7 +165,7 @@ class IntervalRadarChart:
             else:
                 ha, va = 'center', 'top'
             
-            # Place label at the angle with enhanced visibility - no background
+            # Place label at the angle with enhanced visibility
             ax.text(angle_rad, label_distance, feature_names[i], 
                  color='black', fontsize=12, fontweight='bold',
                  horizontalalignment=ha, verticalalignment=va)
@@ -222,19 +173,7 @@ class IntervalRadarChart:
         # Check if we're in the case where there are no labels and no centroids
         no_labels_or_centroids = (labels is None or np.all(labels == 0)) and centroids is None
         
-        # Function to normalize values for each feature to the 0-1 scale
-        def normalize_values(values):
-            normalized = np.zeros_like(values)
-            for j in range(n_features):
-                min_val = feature_mins[j]
-                max_val = feature_maxs[j]
-                if max_val > min_val:  # Avoid division by zero
-                    normalized[:, j] = (values[:, j] - min_val) / (max_val - min_val)
-                else:
-                    normalized[:, j] = 0.5  # Default to middle if min==max
-            return normalized
-        
-        # Draw data samples using normalized values
+        # Draw data samples using scaled values but display original values on axes
         legend_handles = []
         if intervals is not None:
             # For each cluster, select a limited number of samples to display
@@ -250,19 +189,28 @@ class IntervalRadarChart:
                 line_color = cluster_colors[idx % len(cluster_colors)]
                 
                 for j in cluster_indices:
-                    # Normalize the values for this sample
-                    sample_lower = data_lower[j:j+1]
-                    sample_upper = data_upper[j:j+1]
-                    sample_center = data_center[j:j+1]
+                    # Get the original values for this sample
+                    sample_lower = data_lower[j]
+                    sample_upper = data_upper[j]
+                    sample_center = data_center[j]
                     
-                    norm_lower = normalize_values(sample_lower).flatten()
-                    norm_upper = normalize_values(sample_upper).flatten()
-                    norm_center = normalize_values(sample_center).flatten()
+                    # Scale values for visualization (only for plotting, not changing values)
+                    scaled_lower = np.zeros_like(sample_lower)
+                    scaled_upper = np.zeros_like(sample_upper)
+                    scaled_center = np.zeros_like(sample_center)
+                    
+                    for feat_idx in range(n_features):
+                        scaled_lower[feat_idx] = cls.scale_to_unit(sample_lower[feat_idx], 
+                                                                  feat_idx, feature_mins, feature_maxs)
+                        scaled_upper[feat_idx] = cls.scale_to_unit(sample_upper[feat_idx], 
+                                                                  feat_idx, feature_mins, feature_maxs)
+                        scaled_center[feat_idx] = cls.scale_to_unit(sample_center[feat_idx], 
+                                                                  feat_idx, feature_mins, feature_maxs)
                     
                     # Close the loop for each sample
-                    line_data_lower = np.append(norm_lower, norm_lower[0])
-                    line_data_upper = np.append(norm_upper, norm_upper[0])
-                    line_data_center = np.append(norm_center, norm_center[0])
+                    line_data_lower = np.append(scaled_lower, scaled_lower[0])
+                    line_data_upper = np.append(scaled_upper, scaled_upper[0])
+                    line_data_center = np.append(scaled_center, scaled_center[0])
                     
                     # Plot center line with different opacity based on whether we have labels/centroids
                     if no_labels_or_centroids:
@@ -302,23 +250,32 @@ class IntervalRadarChart:
                 if intervals is not None and np.sum(labels == lab) == 0 and idx < len(labels):
                     continue
                 
-                # Normalize the centroid values
-                cent_lower = centroid_lower[idx:idx+1]
-                cent_upper = centroid_upper[idx:idx+1]
-                cent_center = centroid_center[idx:idx+1]
+                # Get the centroid values
+                cent_lower = centroid_lower[idx]
+                cent_upper = centroid_upper[idx]
+                cent_center = centroid_center[idx]
                 
-                norm_cent_lower = normalize_values(cent_lower).flatten()
-                norm_cent_upper = normalize_values(cent_upper).flatten()
-                norm_cent_center = normalize_values(cent_center).flatten()
+                # Scale values for visualization (only for plotting, not changing values)
+                scaled_cent_lower = np.zeros_like(cent_lower)
+                scaled_cent_upper = np.zeros_like(cent_upper)
+                scaled_cent_center = np.zeros_like(cent_center)
+                
+                for feat_idx in range(n_features):
+                    scaled_cent_lower[feat_idx] = cls.scale_to_unit(cent_lower[feat_idx], 
+                                                                   feat_idx, feature_mins, feature_maxs)
+                    scaled_cent_upper[feat_idx] = cls.scale_to_unit(cent_upper[feat_idx], 
+                                                                   feat_idx, feature_mins, feature_maxs)
+                    scaled_cent_center[feat_idx] = cls.scale_to_unit(cent_center[feat_idx], 
+                                                                    feat_idx, feature_mins, feature_maxs)
                 
                 # Get a more prominent color for centroids
                 base_color = cluster_colors[idx % len(cluster_colors)]
                 dark_color = tuple([c*0.7 for c in base_color[:3]] + [1.0])  # Darker, fully opaque
                 
                 # Close the loop for centroids
-                centroid_lower_loop = np.append(norm_cent_lower, norm_cent_lower[0])
-                centroid_upper_loop = np.append(norm_cent_upper, norm_cent_upper[0])
-                centroid_center_loop = np.append(norm_cent_center, norm_cent_center[0])
+                centroid_lower_loop = np.append(scaled_cent_lower, scaled_cent_lower[0])
+                centroid_upper_loop = np.append(scaled_cent_upper, scaled_cent_upper[0])
+                centroid_center_loop = np.append(scaled_cent_center, scaled_cent_center[0])
                 
                 # Plot center line for centroid with high visibility - always thicker line now
                 line_width = 3.0  # Fixed thickness
@@ -348,8 +305,8 @@ class IntervalRadarChart:
                 )
                 centroid_legend_handles.append(centroid_handle)
         
-        # Set axis limits for fixed plotting scale
-        ax.set_ylim(r_min, r_max)
+        # Set axis limits for fixed plotting scale (0 to 1 for visualization)
+        ax.set_ylim(0, 1)
         ax.set_xticks([])
         ax.set_yticks([])
         
@@ -361,7 +318,7 @@ class IntervalRadarChart:
                      frameon=True, framealpha=0.8, fontsize=10,
                      edgecolor='lightgray')
         
-        # Add title as a separate text element at the top of the figure - no background
+        # Add title as a separate text element at the top of the figure
         if title:
             fig.suptitle(title, y=0.98, fontsize=18, fontweight='bold')
         

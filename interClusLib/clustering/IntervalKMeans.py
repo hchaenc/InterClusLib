@@ -1,54 +1,55 @@
-import pandas as pd
 import numpy as np
 from numpy.random import RandomState
 from warnings import warn
-from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
+from interClusLib.clustering.AbstractIntervalClustering import AbstractIntervalClustering
 
-class IntervalKMeans:
+class IntervalKMeans(AbstractIntervalClustering):
     """
-    A custom K-Means clustering for interval data
+    A K-Means clustering algorithm for interval data.
+    
+    Parameters
+    ----------
+    n_clusters : int, default=3
+        Number of clusters to find.
+    max_iter : int, default=100
+        Maximum number of iterations.
+    tol : float, default=1e-4
+        Tolerance for convergence.
+    distance_func : str, default='euclidean'
+        Distance function name.
+    random_state : int or RandomState, default=42
+        Random seed or RandomState for initialization.
     """
 
-    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, distance_func='euclidean', random_state=42):    
-        """
-        :param n_clusters: number of clusters
-        :param max_iter: maximum number of iterations
-        :param tol: tolerance for convergence
-        :param distance_func: distance function name or callable
-        :param random_state: random seed
-        """
-        self.n_clusters = n_clusters
+    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, distance_func='euclidean', random_state=42):
+        # Call parent class constructor
+        super().__init__(n_clusters=n_clusters, distance_func=distance_func)
+        
         self.max_iter = max_iter
         self.tol = tol
-        self.train_data = None
-        self.isSim = None
+        
         if isinstance(random_state, np.random.RandomState):
             self.random_state = random_state
         else:
             try:
                 self.random_state = np.random.RandomState(random_state)
             except:
-                # 如果转换失败，使用默认种子
                 print(f"Warning: Could not use random_state={random_state}, using default seed 42 instead")
                 self.random_state = np.random.RandomState(42)
-        
-        # 保存原始的distance_func名称，用于创建新实例时使用
-        self.distance_func_name = distance_func if isinstance(distance_func, str) else 'custom'
-
-        if distance_func in SIMILARITY_FUNCTIONS:
-            self.distance_function = SIMILARITY_FUNCTIONS[distance_func]
-            self.isSim = True
-        elif distance_func in DISTANCE_FUNCTIONS:
-            self.distance_function = DISTANCE_FUNCTIONS[distance_func]
-            self.isSim = False
-        else:
-            valid_funcs = ", ".join(list(SIMILARITY_FUNCTIONS.keys()) + list(DISTANCE_FUNCTIONS.keys()))
-            raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
 
     def _init_centroids(self, intervals):
         """
         Initialize cluster centroids by randomly picking samples from 'intervals'.
-        intervals: shape (n_samples, n_dims, 2)
+        
+        Parameters
+        ----------
+        intervals : ndarray
+            Interval data with shape (n_samples, n_dims, 2)
+            
+        Returns
+        -------
+        ndarray
+            Initial centroids with shape (n_clusters, n_dims, 2)
         """
         n_samples = intervals.shape[0]
         # randomly choose k distinct samples as initial centroids
@@ -59,14 +60,35 @@ class IntervalKMeans:
     def _compute_centroid(self, intervals_in_cluster):
         """
         Compute the centroid of intervals in one cluster.
-        intervals_in_cluster: shape (k, n_dims, 2)
+        
+        Parameters
+        ----------
+        intervals_in_cluster : ndarray
+            Interval data with shape (k, n_dims, 2)
+            
+        Returns
+        -------
+        ndarray
+            Centroid with shape (n_dims, 2)
         """
         # mean of lower bounds, mean of upper bounds dimension-wise
         return np.mean(intervals_in_cluster, axis=0)
     
     def _assign_clusters(self, intervals, centroids):
         """
-        Assign each sample in 'intervals' to the nearest centroid using 'distance_func'.
+        Assign each sample in 'intervals' to the nearest centroid.
+        
+        Parameters
+        ----------
+        intervals : ndarray
+            Interval data with shape (n_samples, n_dims, 2)
+        centroids : ndarray
+            Centroid data with shape (n_clusters, n_dims, 2)
+            
+        Returns
+        -------
+        ndarray
+            Cluster labels with shape (n_samples,)
         """
         n_samples = intervals.shape[0]
         labels = np.zeros(n_samples, dtype=np.int32)
@@ -75,15 +97,24 @@ class IntervalKMeans:
             # compute distance to each centroid
             dists = [self.distance_function(intervals[i], c) for c in centroids]
             if self.isSim:
-                labels[i] = np.argmax(dists)  # 相似性：选择值最大的 centroid
+                labels[i] = np.argmax(dists)  # For similarity: choose highest value
             else:
-                labels[i] = np.argmin(dists)
+                labels[i] = np.argmin(dists)  # For distance: choose lowest value
         return labels
     
     def fit(self, intervals):
         """
-        intervals: shape (n_samples, n_dims, 2)
-        distance_func: function that takes (interval_a, interval_b) and returns a scalar distance
+        Fit the K-Means model to the interval data.
+        
+        Parameters
+        ----------
+        intervals : ndarray
+            Interval data to cluster with shape (n_samples, n_dims, 2)
+            
+        Returns
+        -------
+        self : object
+            Fitted estimator.
         """
         # 1. Initialize centroids
         centroids = self._init_centroids(intervals)
@@ -99,7 +130,7 @@ class IntervalKMeans:
                 if len(cluster_points) > 0:
                     centroid_k = self._compute_centroid(cluster_points)
                 else:
-                    # if no points assigned, re-initialize or handle it in some way
+                    # if no points assigned, keep previous centroid
                     centroid_k = centroids[k]
                 new_centroids.append(centroid_k)
             new_centroids = np.array(new_centroids)
@@ -114,31 +145,27 @@ class IntervalKMeans:
         self.train_data = intervals
         self.centroids_ = centroids
         self.labels_ = labels
-
-    def get_labels(self):
-        if self.labels_ is None:
-            raise RuntimeError("Model not fitted yet.")
-        return self.labels_
+        
+        return self
 
     def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                               metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], distance_func=None, 
-                               max_iter=None, tol=None, random_state=None, 
-                               n_init=1):
+                               metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'],
+                               distance_func=None, max_iter=None, tol=None, random_state=None, n_init=1):
         """
         Compute evaluation metrics for a range of cluster numbers.
         
-        Parameters:
-        -----------
-        intervals : array-like
+        Parameters
+        ----------
+        intervals : ndarray
             Interval data with shape (n_samples, n_dims, 2)
         min_clusters : int, default=2
             Minimum number of clusters to evaluate
         max_clusters : int, default=10
             Maximum number of clusters to evaluate
-        metrics : list of str, default=['distortion']
-            Metrics to compute, can be any key from the EVALUATION dictionary
-        distance_func : str or callable, default=None
-            Distance function name or callable. If None, uses the current instance's distance function.
+        metrics : list, default=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn']
+            Metrics to compute
+        distance_func : str, default=None
+            Distance function name. If None, uses the current instance's distance function.
         max_iter : int, default=None
             Maximum number of iterations. If None, uses the current instance's value.
         tol : float, default=None
@@ -148,8 +175,8 @@ class IntervalKMeans:
         n_init : int, default=1
             Number of times to run the algorithm with different centroid seeds.
         
-        Returns:
-        --------
+        Returns
+        -------
         dict
             Dictionary where keys are metric names and values are dictionaries 
             mapping k values to metric results
@@ -162,7 +189,7 @@ class IntervalKMeans:
                 raise ValueError(f"Unknown metric: {metric}. Available options: {list(EVALUATION.keys())}")
         
         # Use current instance parameters if not specified
-        distance_func = distance_func or self.distance_func_name
+        distance_func = distance_func or self.distance_func
         max_iter = max_iter or self.max_iter
         tol = tol or self.tol
         random_state = random_state if random_state is not None else (
@@ -230,25 +257,25 @@ class IntervalKMeans:
 
     def cluster_and_return(self, data, k):
         """
-        对数据运行区间聚类并返回标签和中心点
+        Run K-Means clustering algorithm on data and return labels and centroids.
         
-        Parameters:
-        -----------
-        data : array-like
-            形状为(n_samples, n_dims, 2)的区间数据
-        k : int, optional
-            聚类数量，如果为None则使用初始化时设置的n_clusters
+        Parameters
+        ----------
+        data : ndarray
+            Interval data with shape (n_samples, n_dims, 2)
+        k : int
+            Number of clusters
             
-        Returns:
-        --------
+        Returns
+        -------
         tuple
-            (labels, centroids) - 聚类标签和中心点
+            (labels, centroids) - Cluster labels and centroids
         """
-        model = IntervalKMeans(
+        model = self.__class__(
             n_clusters=k,
             max_iter=self.max_iter,
             tol=self.tol,
-            distance_func=self.distance_func_name,
+            distance_func=self.distance_func,
             random_state=self.random_state
         )
         model.fit(data)

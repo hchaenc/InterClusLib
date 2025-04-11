@@ -3,5 +3,6 @@ from .Interval3d import Interval3d
 from .IntervalParallelCoordinates import IntervalParallelCoordinates
 from .IntervalRadarChart import IntervalRadarChart
 from .Dendrogram import Dendrogram
+from .IntervalVisualization import IntervalVisualization
 
-__all__ = ['Interval2d', 'Interval3d', 'IntervalParallelCoordinates', 'IntervalRadarChart','Dendrogram']
+__all__ = ['Interval2d', 'Interval3d', 'IntervalParallelCoordinates', 'IntervalRadarChart','Dendrogram','IntervalVisualization']

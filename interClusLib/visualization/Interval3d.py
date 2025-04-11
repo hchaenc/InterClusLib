@@ -1,16 +1,17 @@
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import matplotlib.colors as mcolors
+from interClusLib.visualization.IntervalVisualization import IntervalVisualization
 
-class Interval3d:
-    """Class for 3D interval visualization"""
+class Interval3d(IntervalVisualization):
+    """Implementation class for 3D interval visualization"""
     
-    @staticmethod
-    def visualize(intervals=None, centroids=None, labels=None, figsize=(8, 8), title="3D Intervals", 
-                  alpha=0.3, centroid_alpha=0.6, margin=5, feature_names=None, max_samples_per_cluster=None):
+    @classmethod
+    def visualize(cls, intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
+                  figsize=(8, 8), title="3D Intervals", alpha=0.3, centroid_alpha=0.6, 
+                  margin=0.5, feature_names=None):
         """
         Unified visualization function for 3D intervals with optional centroids
         
@@ -22,13 +23,13 @@ class Interval3d:
         :param centroids: Centroid data with shape (n_clusters, n_dims, 2), can be None if only plotting intervals
                          Dimensions will be processed the same as intervals
         :param labels: Optional, array of shape (n_samples,) for cluster labels or categories
+        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :param figsize: Figure size, default is (8, 8)
         :param title: Figure title
         :param alpha: Transparency for regular intervals, default is 0.3
         :param centroid_alpha: Transparency for centroids, default is 0.6
         :param margin: Margin around axis limits, default is 5
         :param feature_names: List of feature names, default is None, will auto-generate ["x1", "x2", "x3"]
-        :param max_samples_per_cluster: Maximum number of samples to display per cluster, default is None (show all samples)
         :return: fig, ax - matplotlib figure and axes objects
         """
         # Validate input: at least one of intervals or centroids must be provided
@@ -41,29 +42,31 @@ class Interval3d:
         # Process intervals if provided
         interval_legend_handles = []
         if intervals is not None:
-            processed_intervals = Interval3d._process_intervals(intervals)
-            interval_legend_handles = Interval3d.draw_3d_intervals(ax, processed_intervals, labels, 
-                                                                  alpha=alpha, 
-                                                                  max_samples_per_cluster=max_samples_per_cluster)
+            # Validate and process intervals
+            cls.validate_intervals(intervals)
+            processed_intervals = cls._process_intervals(intervals)
+            interval_legend_handles = cls._draw_3d_intervals(ax, processed_intervals, labels, 
+                                                          alpha=alpha, 
+                                                          max_samples_per_cluster=max_samples_per_cluster)
         else:
             processed_intervals = None
             
         # Process centroids if provided
         if centroids is not None:
-            processed_centroids = Interval3d._process_intervals(centroids)
+            # Validate and process centroids
+            cls.validate_centroids(centroids)
+            processed_centroids = cls._process_intervals(centroids)
             
-            # If we have both intervals and labels, ensure color consistency between intervals and centroids
-            n_clusters = processed_centroids.shape[0]
-            if labels is not None and intervals is not None:
-                unique_labels = np.unique(labels)
-                cmap = plt.cm.get_cmap('viridis', max(len(unique_labels), n_clusters))
-            else:
-                cmap = plt.cm.get_cmap('viridis', n_clusters)
+            # Set up cluster information
+            labels, unique_labels, n_clusters = cls.setup_cluster_info(intervals, labels, centroids)
+            
+            # Generate colors for clusters
+            cluster_colors = cls.generate_cluster_colors(n_clusters, 'viridis')
             
             centroid_legend_handles = []
             for i in range(n_clusters):
                 # Get darker color for centroids
-                base_color = np.array(cmap(i))
+                base_color = np.array(cluster_colors[i])
                 dark_color = np.clip(base_color * 0.7, 0, 1)
                 dark_color[3] = 1.0  # Full opacity
                 
@@ -71,7 +74,7 @@ class Interval3d:
                 y_lower, y_upper = processed_centroids[i, 1, 0], processed_centroids[i, 1, 1]
                 z_lower, z_upper = processed_centroids[i, 2, 0], processed_centroids[i, 2, 1]
                 
-                faces = Interval3d.get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper)
+                faces = cls._get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper)
                 cube = Poly3DCollection(
                     faces, 
                     edgecolor="black", 
@@ -144,11 +147,8 @@ class Interval3d:
         ax.set_ylim(y_min, y_max)
         ax.set_zlim(z_min, z_max)
         
-        # Set axis labels
-        if feature_names is None:
-            feature_names = ["x1", "x2", "x3"]
-        elif len(feature_names) < 3:
-            feature_names = list(feature_names) + [f"x{i+1}" for i in range(len(feature_names), 3)]
+        # Generate and set feature names
+        feature_names = cls.generate_feature_names(3, feature_names, prefix="x")
         
         ax.set_xlabel(feature_names[0])
         ax.set_ylabel(feature_names[1])
@@ -169,35 +169,22 @@ class Interval3d:
         :param intervals: Input intervals with shape (n_samples, n_dims, 2)
         :return: Processed intervals with shape (n_samples, 3, 2)
         """
-        # Only handle 3D array case (n_samples, n_dims, 2)
-        if intervals.ndim == 3:
-            n_samples, n_dims, width = intervals.shape
+        n_samples, n_dims, width = intervals.shape
             
-            if width != 2:
-                raise ValueError(
-                    f"Last dimension of intervals must be 2 (lower, upper). Got {width}."
-                )
-                
-            if n_dims < 3:
-                raise ValueError(
-                    f"Input intervals must have at least 3 dimensions. Got {n_dims}."
-                )
-                
-            elif n_dims > 3:
-                # Take only the first 3 dimensions
-                return intervals[:, :3, :]
-                
-            else:  # n_dims == 3
-                return intervals
-                
-        else:
+        if n_dims < 3:
             raise ValueError(
-                f"Unexpected number of dimensions in interval array: {intervals.ndim}. "
-                "Expected 3 dimensions (n_samples, n_dims, 2)."
+                f"Input intervals must have at least 3 dimensions for 3D visualization. Got {n_dims}."
             )
+            
+        elif n_dims > 3:
+            # Take only the first 3 dimensions
+            return intervals[:, :3, :]
+            
+        else:  # n_dims == 3
+            return intervals
     
     @staticmethod
-    def get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper):
+    def _get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper):
         """
         Given lower and upper bounds in x, y, z dimensions,
         return a list of 6 faces (polygons), each face is a list of 4 corner points (x,y,z).
@@ -229,8 +216,9 @@ class Interval3d:
         ]
         return faces
 
-    @staticmethod
-    def draw_3d_intervals(ax, intervals, labels=None, alpha=0.3, line_width=1, max_samples_per_cluster=None):
+    @classmethod
+    def _draw_3d_intervals(cls, ax, intervals, labels=None, alpha=0.3, line_width=1, 
+                          max_samples_per_cluster=None):
         """
         Draw each 3D interval (x_lower, x_upper; y_lower, y_upper; z_lower, z_upper)
         as a cuboid in the given 3D axes 'ax'.
@@ -245,16 +233,17 @@ class Interval3d:
         :return: List of legend handles
         """
         # Check data structure
-        if intervals.ndim != 3 or intervals.shape[1] != 3 or intervals.shape[2] != 2:
+        if intervals.shape[1] != 3:
             raise ValueError(
-                "Expected intervals to have shape (n_samples, 3, 2). "
-                f"Got {intervals.shape} instead."
+                f"3D visualization requires interval data with 3 dimensions. "
+                f"Got {intervals.shape[1]} dimensions instead."
             )
 
         legend_handles = []
         if labels is not None:
+            # Get unique labels and generate colors
             unique_labels = np.unique(labels)
-            cmap = plt.cm.get_cmap('viridis', len(unique_labels))
+            cluster_colors = cls.generate_cluster_colors(len(unique_labels), 'viridis')
 
             for idx, lab in enumerate(unique_labels):
                 mask = (labels == lab)
@@ -272,14 +261,14 @@ class Interval3d:
                     mask[selected_indices] = True
                 
                 sub_intervals = intervals[mask]
-                color = cmap(idx)
+                color = cluster_colors[idx]
 
                 for interval3d in sub_intervals:
                     x_lower, x_upper = interval3d[0, 0], interval3d[0, 1]
                     y_lower, y_upper = interval3d[1, 0], interval3d[1, 1]
                     z_lower, z_upper = interval3d[2, 0], interval3d[2, 1]
 
-                    faces = Interval3d.get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper)
+                    faces = cls._get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper)
                     # Poly3DCollection expects a list of faces, each face is a list of (x,y,z) points
                     cube = Poly3DCollection(
                         faces, 
@@ -319,7 +308,7 @@ class Interval3d:
                 y_lower, y_upper = interval3d[1, 0], interval3d[1, 1]
                 z_lower, z_upper = interval3d[2, 0], interval3d[2, 1]
 
-                faces = Interval3d.get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper)
+                faces = cls._get_cube_faces(x_lower, x_upper, y_lower, y_upper, z_lower, z_upper)
                 cube = Poly3DCollection(
                     faces, 
                     edgecolor="black", 

@@ -1,15 +1,15 @@
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from interClusLib.visualization.IntervalVisualization import IntervalVisualization
 
-class Interval2d:
-    """Class for 2D interval visualization"""
+class Interval2d(IntervalVisualization):
+    """Implementation class for 2D interval visualization"""
     
-    @staticmethod
-    def visualize(intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
-                  figsize=(8, 8), title="2D Intervals", alpha=0.3, centroid_alpha=0.6, margin=0.5, feature_names=None, 
-                  fill_intervals=False):
+    @classmethod
+    def visualize(cls, intervals=None, centroids=None, labels=None, max_samples_per_cluster=None,
+                  figsize=(8, 8), title="2D Intervals", alpha=0.3, centroid_alpha=0.6, 
+                  margin=0.5, feature_names=None, fill_intervals=False):
         """
         Unified visualization function for 2D intervals with optional centroids
         
@@ -40,29 +40,31 @@ class Interval2d:
         # Process intervals if provided
         interval_legend_handles = []
         if intervals is not None:
-            processed_intervals = Interval2d._process_intervals(intervals)
-            interval_legend_handles = Interval2d.draw_2d_intervals(ax, processed_intervals, labels, 
-                                                                 alpha=alpha, fill=fill_intervals,
-                                                                 max_samples_per_cluster=max_samples_per_cluster)
+            processed_intervals = cls._process_intervals(intervals)
+            interval_legend_handles = cls._draw_2d_intervals(ax, processed_intervals, labels, 
+                                                          alpha=alpha, fill=fill_intervals,
+                                                          max_samples_per_cluster=max_samples_per_cluster)
         else:
             processed_intervals = None
             
         # Process centroids if provided
         if centroids is not None:
-            processed_centroids = Interval2d._process_intervals(centroids)
+            processed_centroids = cls._process_intervals(centroids)
             
-            # If we have both intervals and labels, ensure color consistency between intervals and centroids
-            n_clusters = processed_centroids.shape[0]
-            if labels is not None and intervals is not None:
-                unique_labels = np.unique(labels)
-                cmap = plt.cm.get_cmap('viridis', max(len(unique_labels), n_clusters))
+            # Get cluster information
+            if intervals is not None and labels is not None:
+                _, unique_labels, n_clusters = cls.setup_cluster_info(intervals, labels, centroids)
             else:
-                cmap = plt.cm.get_cmap('viridis', n_clusters)
+                n_clusters = processed_centroids.shape[0]
+                unique_labels = np.arange(n_clusters)
+            
+            # Generate colors for clusters
+            cluster_colors = cls.generate_cluster_colors(n_clusters, 'viridis')
             
             centroid_legend_handles = []
             for i in range(n_clusters):
                 # Get darker color for centroids
-                base_color = np.array(cmap(i))
+                base_color = np.array(cluster_colors[i])
                 dark_color = np.clip(base_color * 0.7, 0, 1)
                 dark_color[3] = 1.0  # Full opacity
                 
@@ -89,14 +91,6 @@ class Interval2d:
                     zorder=10
                 )
                 ax.add_patch(rect)
-                
-                # REMOVED: Center point marker
-                # The following code has been removed:
-                # # Add marker at centroid center
-                # center_x = x_lower + width/2
-                # center_y = y_lower + height/2
-                # ax.scatter([center_x], [center_y], 
-                #           color=dark_color, s=100, edgecolor='white', linewidth=1, zorder=11)
                 
                 # Create legend handle for this centroid
                 label = f"Centroid {i+1}"
@@ -189,33 +183,28 @@ class Interval2d:
         :return: Processed intervals with shape (n_samples, n_dims, 2) where n_dims is 1 or 2
         """
         # Only handle 3D array case (n_samples, n_dims, 2)
-        if intervals.ndim == 3:
-            n_samples, n_dims, width = intervals.shape
+        if intervals.ndim != 3 or intervals.shape[2] != 2:
+            raise ValueError(
+                f"Interval data should have shape (n_samples, n_dims, 2). "
+                f"Got {intervals.shape} instead."
+            )
             
-            if width != 2:
-                raise ValueError(
-                    f"Last dimension of intervals must be 2 (lower, upper). Got {width}."
-                )
-                
-            if n_dims == 1 or n_dims == 2:
-                # Already in correct format
-                return intervals
-            elif n_dims > 2:
-                # Take only the first 2 dimensions
-                return intervals[:, :2, :]
-            else:
-                raise ValueError(
-                    f"Input intervals must have at least 1 dimension. Got {n_dims}."
-                )
+        n_samples, n_dims, width = intervals.shape
+            
+        if n_dims == 1 or n_dims == 2:
+            # Already in correct format
+            return intervals
+        elif n_dims > 2:
+            # Take only the first 2 dimensions
+            return intervals[:, :2, :]
         else:
             raise ValueError(
-                f"Unexpected number of dimensions in interval array: {intervals.ndim}. "
-                "Expected 3 dimensions (n_samples, n_dims, 2)."
+                f"Input intervals must have at least 1 dimension. Got {n_dims}."
             )
     
     @staticmethod
-    def draw_2d_intervals(ax, intervals, labels=None, alpha=0.3, line_width=2, 
-                          fill=False, max_samples_per_cluster=None):
+    def _draw_2d_intervals(ax, intervals, labels=None, alpha=0.3, line_width=2, 
+                           fill=False, max_samples_per_cluster=None):
         """
         Draw each 2D interval as a rectangle (or square for 1D) in the given axes 'ax'.
         

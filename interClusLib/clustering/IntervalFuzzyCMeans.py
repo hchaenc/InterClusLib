@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 from numpy.random import RandomState
 from warnings import warn
-from interClusLib.metric import SIMILARITY_FUNCTIONS, DISTANCE_FUNCTIONS
+from interClusLib.clustering.AbstractIntervalClustering import AbstractIntervalClustering
 
-class IntervalFuzzyCMeans:
+class IntervalFuzzyCMeans(AbstractIntervalClustering):
     """
     Interval Fuzzy C-Means (IFCM & IFCMADC) for interval-valued data (n_samples, n_dims, 2).
 
@@ -20,8 +20,8 @@ class IntervalFuzzyCMeans:
         Convergence threshold for membership changes or objective.
     - adaptive_weights : bool
         If True, use IFCMADC method with adaptive weights k_i^j.
-    - distance_method : str
-        Which distance to use for D(x_k, c_i). Example: "sum_squares" / "hausdorff".
+    - distance_func : str or callable
+        Which distance to use for D(x_k, c_i). Example: "euclidean" / "hausdorff" or a custom function.
     - U : np.ndarray of shape (n_samples, n_clusters)
         Fuzzy membership matrix.
     - centers_a, centers_b : np.ndarray of shape (n_clusters, n_dims)
@@ -38,7 +38,9 @@ class IntervalFuzzyCMeans:
                  max_iter=100,
                  tol=1e-5,
                  adaptive_weights=False,
-                 distance_func = "euclidean",
+                 distance_func="euclidean",
+                 is_similarity=None,
+                 **kwargs
                  ):
         """
         Parameters
@@ -54,31 +56,28 @@ class IntervalFuzzyCMeans:
         adaptive_weights : bool
             If True, uses IFCMADC with adaptive weights k_i^j.
             If False, uses basic IFCM.
-        metric: str
-            Distance Function
+        distance_func : str or callable
+            Distance function name or a custom function.
+        is_similarity : bool, default=None
+            If providing a custom distance_func, set to True if it's a similarity function,
+            False if it's a distance function. Ignored if distance_func is a string.
+        **kwargs : dict
+            Additional parameters to pass to the parent class.
         """
-        self.n_clusters = n_clusters
+        # 调用父类构造函数
+        super().__init__(n_clusters=n_clusters, distance_func=distance_func, is_similarity=is_similarity, **kwargs)
+        
         self.m = m
         self.max_iter = max_iter
         self.tol = tol
         self.adaptive_weights = adaptive_weights
-        self.distance_func = distance_func
 
         self.U = None
         self.centers_a = None  # shape (n_clusters, n_dims)
         self.centers_b = None  # shape (n_clusters, n_dims)
         self.k = None          # shape (n_clusters, n_dims) if adaptive_weights=True
         self.objective_ = None
-
-        if distance_func in SIMILARITY_FUNCTIONS:
-            self.distance_function = SIMILARITY_FUNCTIONS[distance_func]
-            self.isSim = True
-        elif distance_func in DISTANCE_FUNCTIONS:
-            self.distance_function = DISTANCE_FUNCTIONS[distance_func]
-            self.isSim = False
-        else:
-            valid_funcs = ", ".join(list(SIMILARITY_FUNCTIONS.keys()) + list(DISTANCE_FUNCTIONS.keys()))
-            raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
+        self.crisp_label = None
 
     def _init_membership(self, n_samples):
         """
@@ -316,6 +315,11 @@ class IntervalFuzzyCMeans:
 
         self.objective_ = obj
         self.centroids_ = self._convert_centers_to_intervals()
+        # 设置标签
+        self.labels_ = self.get_crisp_assignments()
+        # 存储训练数据
+        self.train_data = intervals
+        
         return self
 
     def get_membership(self):
@@ -361,10 +365,9 @@ class IntervalFuzzyCMeans:
         return crisp_labels
     
     def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                           metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], distance_func=None, 
-                           m=None, max_iter=None, tol=None, 
-                           adaptive_weights=None, random_state=None, 
-                           n_init=1):
+                           metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], 
+                           distance_func=None, m=None, max_iter=None, tol=None, 
+                           adaptive_weights=None, random_state=None, n_init=1, **kwargs):
         """
         Compute evaluation metrics for a range of cluster numbers for fuzzy clustering.
         
@@ -376,7 +379,7 @@ class IntervalFuzzyCMeans:
             Minimum number of clusters to evaluate
         max_clusters : int, default=10
             Maximum number of clusters to evaluate
-        metrics : list of str, default=['distortion']
+        metrics : list of str, default=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn']
             Metrics to compute, can be any key from the EVALUATION dictionary
         distance_func : str or callable, default=None
             Distance function name or callable. If None, uses the current instance's distance function.
@@ -392,6 +395,8 @@ class IntervalFuzzyCMeans:
             Random seed. If provided, it will be used to set numpy's random state.
         n_init : int, default=1
             Number of times to run the algorithm with different initializations.
+        **kwargs : dict
+            Additional parameters for compatibility with the abstract base class.
         
         Returns:
         --------
@@ -412,6 +417,9 @@ class IntervalFuzzyCMeans:
         max_iter = max_iter or self.max_iter
         tol = tol or self.tol
         adaptive_weights = adaptive_weights if adaptive_weights is not None else self.adaptive_weights
+        
+        # Get is_similarity parameter
+        is_similarity = kwargs.get('is_similarity', self.isSim if hasattr(self, 'isSim') else None)
         
         # Set random seed if provided
         if random_state is not None:
@@ -435,7 +443,8 @@ class IntervalFuzzyCMeans:
                         max_iter=max_iter,
                         tol=tol,
                         adaptive_weights=adaptive_weights,
-                        distance_func=distance_func
+                        distance_func=distance_func,
+                        is_similarity=is_similarity
                     )
                     
                     # Fit the model
@@ -458,45 +467,45 @@ class IntervalFuzzyCMeans:
             labels = best_model.get_crisp_assignments()
             
             # Calculate all requested metrics
-            for metric in metrics:
+            for metric_name in metrics:
                 try:
-                    metric_func = EVALUATION[metric]
+                    metric_func = EVALUATION[metric_name]
                     metric_value = metric_func(
                         data=intervals,
                         labels=labels,
                         centers=best_model.centroids_,  # Use pre-computed centroids
                         metric=distance_func
                     )
-                    results[metric][k] = metric_value
+                    results[metric_name][k] = metric_value
                 except Exception as e:
-                    print(f"Error calculating {metric} for k={k}: {e}")
+                    print(f"Error calculating {metric_name} for k={k}: {e}")
         
         return results
     
     def cluster_and_return(self, data, k):
         """
-        对数据运行模糊C均值聚类并返回标签和中心点
+        Run fuzzy c-means clustering on data and return labels and centroids.
         
         Parameters:
         -----------
-        data : array-like
-            形状为(n_samples, n_dims, 2)的区间数据
+        data : ndarray
+            Interval data with shape (n_samples, n_dims, 2)
         k : int
-            聚类数量
+            Number of clusters
             
         Returns:
-        --------
+        -------
         tuple
-            (labels, centroids) - 聚类标签和中心点
+            (labels, centroids) - Cluster labels and centroids
         """
-        model = IntervalFuzzyCMeans(
+        model = self.__class__(
             n_clusters=k,
             m=self.m,
             max_iter=self.max_iter,
             tol=self.tol,
             adaptive_weights=self.adaptive_weights,
-            distance_func=self.distance_func
+            distance_func=self.distance_func,
+            is_similarity=self.isSim if hasattr(self, 'isSim') else None
         )
         model.fit(data)
-        # 对于模糊聚类，返回硬聚类结果（每个样本分配到最高隶属度的簇）
         return model.get_crisp_assignments(), model.centroids_
