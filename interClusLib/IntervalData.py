@@ -15,12 +15,10 @@ class IntervalData:
         """
         self.handle_missing = handle_missing
         self.data = self._validate_data(data)
-        
-        # 添加columns和features属性
+        # Add columns and features attributes
         self.columns = self._get_all_columns()
         self.features = self._extract_feature_names()
-        
-        # 保留has_missing_values属性
+        # Keep the has_missing_values attribute
         self.has_missing_values = self._check_missing_values()
 
     def _validate_data(self, data):
@@ -44,10 +42,10 @@ class IntervalData:
         Check if the data contains missing values and return True/False
         Returns a Python native bool, not a numpy.bool_
         """
-        # 直接检查整个数据框中是否有缺失值
+        # Directly check if there are missing values in the entire DataFrame
         missing_count = self.data.isnull().sum().sum()
         
-        # 使用bool()确保返回Python原生布尔值，而不是numpy.bool_
+        # Use bool() to ensure returning a Python native boolean, not numpy.bool_
         return bool(missing_count > 0)
 
     def _detect_intervals(self):
@@ -81,14 +79,14 @@ class IntervalData:
     def _get_all_columns(self):
         """
         Returns a list of all column names in the data
-        按照用户要求返回形如[feature_1_lower, feature_1_upper, feature_2_lower]的列名列表
+        Returns a list of column names like [feature_1_lower, feature_1_upper, feature_2_lower]
         """
         return self.data.columns.tolist()
     
     def _extract_feature_names(self):
         """
         Extracts the base feature names from all columns
-        返回形如[feature_1, feature_2]的特征名列表
+        Returns a list of feature names like [feature_1, feature_2]
         """
         feature_names = []
         pattern = re.compile(r"(.*)_(lower|upper)", re.IGNORECASE)
@@ -236,7 +234,7 @@ class IntervalData:
 
             final_mid  = midpoint + offset_mid
             final_hw   = halfw + offset_hw
-            final_hw[final_hw < min_width] = min_width  # 使用用户定义的最小宽度
+            final_hw[final_hw < min_width] = min_width  # Use user-defined minimum width
 
             a = final_mid - final_hw
             b = final_mid + final_hw
@@ -262,7 +260,7 @@ class IntervalData:
         Returns interval data as a NumPy array in the shape [n_samples, n_intervals, 2]
         Modified to handle NaN values by either using a mask or safe conversion
         """
-        # 先需要获取所有的interval pairs
+        # First need to get all interval pairs
         interval_pairs = []
         features = self.features
         
@@ -307,7 +305,7 @@ class IntervalData:
         fixed_data = self.data.copy()
         invalid_count = 0
         
-        # 获取所有的interval pairs
+        # Get all interval pairs
         interval_pairs = []
         features = self.features
         
@@ -342,7 +340,7 @@ class IntervalData:
         print("Data Summary:")
         print(self.data.describe())
         
-        # 获取所有的interval pairs并打印
+        # Get all interval pairs and print them
         interval_pairs = []
         features = self.features
         
@@ -379,4 +377,3 @@ class IntervalData:
         """ Saves the data to an Excel file """
         self.data.to_excel(file_path, index=False)
         print(f"Data saved to {file_path}")
-

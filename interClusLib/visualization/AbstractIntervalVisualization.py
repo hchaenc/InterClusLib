@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 
-class IntervalVisualization(ABC):
+class AbstractIntervalVisualization(ABC):
     """
     Abstract base class for interval data visualization.
     

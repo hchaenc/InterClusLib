@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import matplotlib.colors as mcolors
-from interClusLib.visualization.IntervalVisualization import IntervalVisualization
+from interClusLib.visualization.AbstractIntervalVisualization import AbstractIntervalVisualization
 
-class Interval3d(IntervalVisualization):
+class Interval3d(AbstractIntervalVisualization):
     """Implementation class for 3D interval visualization"""
     
     @classmethod

@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path
 import matplotlib.patches as mpatches
 import matplotlib as mpl
-from interClusLib.visualization.IntervalVisualization import IntervalVisualization
+from interClusLib.visualization.AbstractIntervalVisualization import AbstractIntervalVisualization
 
-class IntervalParallelCoordinates(IntervalVisualization):
+class IntervalParallelCoordinates(AbstractIntervalVisualization):
     """Class for parallel coordinates visualization of interval data"""
 
     @classmethod

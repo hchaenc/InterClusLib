@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib as mpl
 from matplotlib.colors import to_rgba
-from interClusLib.visualization.IntervalVisualization import IntervalVisualization
+from interClusLib.visualization.AbstractIntervalVisualization import AbstractIntervalVisualization
 
-class IntervalRadarChart(IntervalVisualization):
+class IntervalRadarChart(AbstractIntervalVisualization):
     """Class for radar chart visualization of interval data"""
 
     @classmethod

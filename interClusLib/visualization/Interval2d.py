@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from interClusLib.visualization.IntervalVisualization import IntervalVisualization
+from interClusLib.visualization.AbstractIntervalVisualization import AbstractIntervalVisualization
 
-class Interval2d(IntervalVisualization):
+class Interval2d(AbstractIntervalVisualization):
     """Implementation class for 2D interval visualization"""
     
     @classmethod

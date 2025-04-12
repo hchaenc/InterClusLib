@@ -4,9 +4,9 @@ from matplotlib.colors import to_rgba
 from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
 from scipy.cluster.hierarchy import fcluster
 import matplotlib.patches as patches
-from interClusLib.visualization.IntervalVisualization import IntervalVisualization
+from interClusLib.visualization.AbstractIntervalVisualization import AbstractIntervalVisualization
 
-class Dendrogram(IntervalVisualization):
+class Dendrogram(AbstractIntervalVisualization):
     """
     Class for hierarchical clustering dendrogram visualization.
     
