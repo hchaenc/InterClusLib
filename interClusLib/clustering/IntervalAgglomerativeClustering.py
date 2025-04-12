@@ -210,13 +210,13 @@ class IntervalAgglomerativeClustering(AbstractIntervalClustering):
             'n_leaves': self.n_samples_
         }
 
-    def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10, 
-                                    metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'], 
-                                    distance_func=None, linkage=None, **kwargs):
+    def compute_metrics_for_k_range(self, intervals, min_clusters=2, max_clusters=10,
+                               metrics=['distortion', 'silhouette', 'calinski_harabasz', 'davies_bouldin', 'dunn'],
+                               distance_func=None, linkage=None, **kwargs):
         """
         Compute evaluation metrics for a range of cluster numbers for hierarchical clustering.
         This is useful for determining the optimal number of clusters.
-        
+
         Parameters:
         -----------
         intervals: numpy.ndarray
@@ -233,27 +233,29 @@ class IntervalAgglomerativeClustering(AbstractIntervalClustering):
             Linkage criterion. If None, uses the current instance's linkage.
         **kwargs: dict
             Additional parameters (not used but included for compatibility with ABC)
-        
+
         Returns:
         --------
         dict
-            Dictionary where keys are metric names and values are dictionaries 
+            Dictionary where keys are metric names and values are dictionaries
             mapping k values to metric results
         """
         from interClusLib.evaluation import EVALUATION
-        
+        # Import scipy's linkage function with a different name to avoid naming conflict
+        from scipy.cluster.hierarchy import linkage as scipy_linkage_func
+
         # Check if requested metrics are valid
         for metric in metrics:
             if metric not in EVALUATION:
                 raise ValueError(f"Unknown metric: {metric}. Available options: {list(EVALUATION.keys())}")
-        
+
         # Use current instance parameters if not specified
         distance_func = distance_func or self.distance_func
-        linkage = linkage or self.linkage
-        
+        linkage_method = linkage or self.linkage
+
         # Initialize results dictionary
         results = {metric: {} for metric in metrics}
-        
+
         # Check if distance_func is a callable
         distance_metric = distance_func
         if callable(distance_func):
@@ -268,22 +270,22 @@ class IntervalAgglomerativeClustering(AbstractIntervalClustering):
             else:
                 valid_funcs = ", ".join(list(self.similarity_funcs) + list(self.distance_funcs))
                 raise ValueError(f"Invalid distance function '{distance_func}'. Available options: {valid_funcs}")
-        
+
         # Compute the distance matrix
         # Create a temporary instance to use compute_distance_matrix
-        temp_instance = self.__class__(n_clusters=2, linkage=linkage, distance_func=distance_func)
+        temp_instance = self.__class__(n_clusters=2, linkage=linkage_method, distance_func=distance_func)
         dist_matrix = temp_instance.compute_distance_matrix(intervals)
-        
+
         # Prepare condensed distance matrix for SciPy
         n_samples = intervals.shape[0]
         condensed_dist = []
         for i in range(n_samples):
             for j in range(i+1, n_samples):
                 condensed_dist.append(dist_matrix[i, j])
-        
+
         # Compute linkage matrix using SciPy
-        scipy_method = self._linkage_map[linkage]
-        linkage_matrix = linkage(condensed_dist, method=scipy_method, metric='precomputed')
+        scipy_method = self._linkage_map[linkage_method]
+        linkage_matrix = scipy_linkage_func(condensed_dist, method=scipy_method, metric='precomputed')
         
         # Compute metrics for each k value
         for k in range(min_clusters, max_clusters + 1):

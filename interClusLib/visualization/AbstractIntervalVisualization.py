@@ -153,7 +153,7 @@ class AbstractIntervalVisualization(ABC):
         
         Parameters:
         :param intervals: Interval data
-        :param centroids: Centroid data 
+        :param centroids: Centroid data
         :param margin: Margin proportion
         :return: feature_mins, feature_maxs
         """
@@ -162,13 +162,13 @@ class AbstractIntervalVisualization(ABC):
             data_lower = intervals[:, :, 0]
             data_upper = intervals[:, :, 1]
             
-            # Initial min/max from data
-            feature_mins = np.min(data_lower, axis=0)
-            feature_maxs = np.max(data_upper, axis=0)
+            # Initial min/max from data - convert to float explicitly
+            feature_mins = np.min(data_lower, axis=0).astype(float)
+            feature_maxs = np.max(data_upper, axis=0).astype(float)
         else:
             # Initialize with centroids if no data
-            feature_mins = np.min(centroids[:, :, 0], axis=0)
-            feature_maxs = np.max(centroids[:, :, 1], axis=0)
+            feature_mins = np.min(centroids[:, :, 0], axis=0).astype(float)
+            feature_maxs = np.max(centroids[:, :, 1], axis=0).astype(float)
             
         # Update min/max with centroids if available
         if centroids is not None and intervals is not None:

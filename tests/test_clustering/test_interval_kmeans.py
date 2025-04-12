@@ -50,7 +50,7 @@ class TestIntervalKMeans(unittest.TestCase):
         self.assertEqual(kmeans.n_clusters, 3)
         self.assertEqual(kmeans.max_iter, 200)
         self.assertEqual(kmeans.tol, 1e-5)
-        self.assertEqual(kmeans.distance_func_name, 'euclidean')
+        self.assertEqual(kmeans.distance_func, 'euclidean')
         self.assertFalse(kmeans.isSim)  # euclidean是距离函数，不是相似度函数
     
     def test_invalid_distance_function(self):
