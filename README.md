@@ -1,4 +1,4 @@
-# INTERCLUSLIB
+# InterClusLib
 
 InterClusLib is a Python library focused on interval data clustering analysis and visualization. It provides various clustering algorithms, preprocessing tools, evaluation methods, and visualization capabilities.
 
@@ -13,7 +13,7 @@ InterClusLib is a Python library focused on interval data clustering analysis an
 
 ## Installation
 
-Install the latest stable version using pip:
+Install the latest stable version using pip (After uploading to PyPi):
 
 ```bash
 pip install intercluslib
@@ -22,7 +22,7 @@ pip install intercluslib
 Install the development version from source:
 
 ```bash
-git clone https://github.com/username/intercluslib.git
+git clone https://github.com/hchaenc/intercluslib.git
 cd intercluslib
 pip install -e .
 ```
@@ -38,44 +38,45 @@ pip install -e .
 
 ## Quick Start
 
-Here's a simple example demonstrating how to use INTERCLUSLIB for interval data clustering analysis:
+Here's a simple example demonstrating how to use InterClusLib for interval data clustering analysis:
 
 ```python
-import intercluslib as icl
-import pandas as pd
-import matplotlib.pyplot as plt
+from interClusLib.IntervalData import IntervalData
+from interClusLib.preprocessing import min_max_normalize
+from interClusLib.clustering.IntervalKMeans import IntervalKMeans
+from interClusLib.visualization import Interval3d, IntervalParallelCoordinates
+from interClusLib.evaluation import *
+from interClusLib.cluster_number_analysis import *
 
 # Load example data
-data = pd.read_csv("examples/ChinaTemp.csv")
-print(f"Data shape: {data.shape}")
+temp_data = IntervalData.from_csv("ModifiedChinaTemp.csv")
+temp_data.summary()
 
 # Data preprocessing
-normalizer = icl.preprocessing.normalizer.MinMaxNormalizer()
-normalized_data = normalizer.fit_transform(data)
+data = temp_data.get_intervals()
+data = min_max_normalize(data)
 
 # Perform clustering using Interval K-Means
-kmeans = icl.clustering.IntervalKMeans(n_clusters=3, random_state=42)
-clusters = kmeans.fit_predict(normalized_data)
-
-# Evaluate optimal number of clusters
-evaluator = icl.evaluation.ElbowMethodEvaluator()
-k_range = range(2, 10)
-inertias = evaluator.compute_inertia(normalized_data, k_range)
+kmeans = IntervalKMeans(n_clusters=3, max_iter=1000, distance_func='euclidean', random_state=43)
+kmeans.fit(data)
 
 # Visualize evaluation results
-plt.figure(figsize=(10, 6))
-plt.plot(k_range, inertias, 'bo-')
-plt.xlabel('Number of Clusters')
-plt.ylabel('Inertia')
-plt.title('Elbow Method for Optimal k')
-plt.grid(True)
-plt.show()
+fig, ax = Interval3d.visualize(intervals=data, labels=kmeans.labels_, centroids=kmeans.centroids_, margin=0.01)
 
-# Visualize clustering results
-visualizer = icl.visualization.HeatMap()
-visualizer.plot(normalized_data, clusters, title='Interval K-Means Clustering Results')
+# Calculate evlauation
+metric_results = kmeans.compute_metrics_for_k_range(
+    data,
+    min_clusters=2,
+    max_clusters=10,
+    metrics=['distortion', 'silhouette', 'davies_bouldin','calinski_harabasz','dunn'],
+)
+
+# Find Optimal Cluster Number
+l_method = LMethod(min_clusters=2, max_clusters=10)
+optimal_k_l = l_method.evaluate(metric_results['distortion'])
+plt = l_method.plot()
+print(f"L Method optimal k: {optimal_k_l}")
 ```
-
 ## Detailed Features
 
 ### Clustering Algorithms (`clustering` module)
@@ -144,25 +145,18 @@ data_standardized = z_score.fit_transform(data)
 #### Outlier Detection
 
 ```python
-from intercluslib.preprocessing import OutlierDetector
+from intercluslib.preprocessing import fix_inverted_intervals
 
-# Detect outliers
-detector = OutlierDetector(method='iqr', threshold=1.5)
-outliers = detector.detect(data)
-print(f"Number of outliers detected: {outliers.sum()}")
-
-# Remove outliers
-data_clean = detector.remove_outliers(data)
+data = fix_inverted_intervals(data)
 ```
 
 #### Imputation
 
 ```python
-from intercluslib.preprocessing import Imputer
+from intercluslib.preprocessing import impute_missing_intervals
 
 # Impute missing values using mean
-imputer = Imputer(strategy='mean')
-data_imputed = imputer.fit_transform(data)
+data_imputed = impute_missing_intervals(data, method = 'mean')
 ```
 
 ### Evaluation Methods (`evaluation` module)
@@ -171,23 +165,27 @@ data_imputed = imputer.fit_transform(data)
 from interClusLib.cluster_number_analysis import ElbowMethodEvaluator, GapStatisticEvaluator, LMethodEvaluator
 
 # Determine optimal number of clusters using Elbow Method
-elbow = ElbowMethodEvaluator()
-optimal_k_elbow = elbow.evaluate(data, k_range=range(2, 10))
+elbow = ElbowMethod()
+optimal_k_elbow = elbow.evaluate(metric_results['distortion'])
 
 # Gap Statistic method
-gap = GapStatisticEvaluator(n_bootstraps=50, random_state=42)
-optimal_k_gap = gap.evaluate(data, k_range=range(2, 10))
+gap = GapStatistic(min_clusters=2, max_clusters=15, n_refs=10)
+optimal_k = gap.evaluate(
+    eval_data=metric_results['distortion'],
+    raw_data=data,
+    cluster_func=cluster
+)
 
 # L Method
-l_method = LMethodEvaluator()
-optimal_k_l = l_method.evaluate(data, k_range=range(2, 15))
+l_method = LMethod(min_clusters=2, max_clusters=10)
+optimal_k_l = l_method.evaluate(metric_results['distortion'])
 
 print(f"Optimal k suggested by Elbow Method: {optimal_k_elbow}")
 print(f"Optimal k suggested by Gap Statistic: {optimal_k_gap}")
 print(f"Optimal k suggested by L Method: {optimal_k_l}")
 ```
 
-### Metrics and Distance Functions (`metric` module)
+### Distance and Similarity Functions (`metric` module)
 
 ```python
 from interClusLib.metric import euclidean_distance, manhattan_distance
