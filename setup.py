@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name = 'InterClusLib',
+    name = 'interClusLib',
     version = '0.1.0',
     description='A Python library for interval data clustering', 
     long_description=open('README.md').read(),
