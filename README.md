@@ -142,21 +142,50 @@ z_score = ZScoreNormalizer()
 data_standardized = z_score.fit_transform(data)
 ```
 
-#### Outlier Detection
+#### Inverted Interval
 
 ```python
-from intercluslib.preprocessing import fix_inverted_intervals
+from interClusLib.preprocessing import InvertedIntervalHandler
 
-data = fix_inverted_intervals(data)
+# Create handler instance
+handler = InvertedIntervalHandler()
+
+# Check for inverted intervals
+results = handler.check_intervals(interval_data)
+print(f"Found {results['total_inverted']} inverted intervals")
+
+# Fix inverted intervals by swapping bounds
+fixed_data = handler.fix_inverted_intervals(interval_data, action='swap')
+
+# Or use convenience method for one-step processing
+fixed_data = InvertedIntervalHandler.validate_and_fix(
+    interval_data, 
+    action='swap',  # Options: 'swap', 'remove', 'set_nan', 'set_equal', 'ignore'
+    show_report=True
+)
 ```
 
-#### Imputation
+#### Missing Data Imputation
 
 ```python
-from intercluslib.preprocessing import impute_missing_intervals
+from interClusLib.preprocessing import MissingValueImputor
 
-# Impute missing values using mean
-data_imputed = impute_missing_intervals(data, method = 'mean')
+# Create imputor instance
+imputor = MissingValueImputor()
+
+# Check for missing values
+results = imputor.check_missing_values(interval_data)
+print(f"Found {results['total_missing']} missing intervals")
+
+# Impute missing values using different methods
+data_imputed = imputor.fix_missing_values(interval_data, action='fill_mean')
+
+# Or use convenience method
+data_imputed = MissingValueImputor.validate_and_fix(
+    interval_data,
+    action='fill_mean',
+    show_report=True
+)
 ```
 
 ### Evaluation Methods (`evaluation` module)
@@ -244,7 +273,7 @@ INTERCLUSLIB/
 │   ├── cluster_number_analysis/ # Evaluation methods
 │   ├── metric/                  # Metrics and distance Measures
 │   ├── preprocessing/           # Preprocessing tools
-│   ├──  visualization/          # Visualization tools
+│   ├── visualization/          # Visualization tools
 │   └── IntervalData,py          # Interval Data structure
 ├── tests/                       # Unit tests
 ├── docs/                        # Documentation
