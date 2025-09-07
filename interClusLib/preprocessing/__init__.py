@@ -1,7 +1,7 @@
-from .normalizer import min_max_normalize, midpoint_width_normalize, robust_quantile_normalize, z_score_normalize
-from .imputer import impute_missing_intervals
-from .outlier import fix_inverted_intervals
+from .data_normalizer import MinMaxNormalizer, ZScoreNormalizer, MidpointWidthNormalizer, RobustQuantileNormalizer
+from .missing_value_imputer import MissingValueImputor
+from .inverted_interval_handler import  InvertedIntervalHandler
 
-__all__ = ['min_max_normalize', 'midpoint_width_normalize', 'robust_quantile_normalize', 'z_score_normalize'
-           'impute_missing_intervals',
-           'fix_inverted_intervals']
+__all__ = ['MinMaxNormalizer', 'ZScoreNormalizer', 'MidpointWidthNormalizer', 'RobustQuantileNormalizer',
+           'MissingValueImputor',
+           'InvertedIntervalHandler']

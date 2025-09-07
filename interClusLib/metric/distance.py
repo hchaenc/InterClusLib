@@ -3,7 +3,6 @@ import numpy as np
 def hausdorff_distance(interval1, interval2):
     """
     Calculate the Hausdorff distance between two intervals.
-    Supports vectorized computation for multiple intervals.
     
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -68,7 +67,6 @@ def hausdorff_distance(interval1, interval2):
 def euclidean_distance(interval1, interval2):
     """
     Calculate the Euclidean distance between two intervals.
-    Supports vectorized computation for multiple intervals.
     
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -170,7 +168,6 @@ def euclidean_distance_optimized(interval1, interval2):
 def manhattan_distance(interval1, interval2):
     """
     Calculate the Manhattan distance between two intervals.
-    Supports vectorized computation for multiple intervals.
     
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -220,7 +217,6 @@ def manhattan_distance(interval1, interval2):
 def chebyshev_distance(interval1, interval2):
     """
     Calculate the Chebyshev distance (L∞ norm) between two intervals.
-    Supports vectorized computation for multiple intervals.
     
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -271,7 +267,6 @@ def cosine_distance(interval1, interval2):
     """
     Calculate the cosine distance between two intervals.
     Cosine distance = 1 - cosine_similarity
-    Supports vectorized computation for multiple intervals.
     
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),

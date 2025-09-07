@@ -3,7 +3,6 @@ import numpy as np
 def jaccard_similarity(interval1, interval2):
     """
     Calculate the Jaccard similarity between two intervals (1D or multi-D).
-    Supports vectorized computation for multiple intervals.
 
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -90,7 +89,6 @@ def jaccard_similarity(interval1, interval2):
 def dice_similarity(interval1, interval2):
     """
     Calculate the Dice similarity between two intervals (1D or multi-D).
-    Supports vectorized computation for multiple intervals.
 
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -177,7 +175,6 @@ def dice_similarity(interval1, interval2):
 def bidirectional_similarity_min(interval1, interval2):
     """
     Calculate the minimum bidirectional subset similarity between two intervals (1D or multi-D).
-    Supports vectorized computation for multiple intervals.
 
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -286,7 +283,6 @@ def bidirectional_similarity_min(interval1, interval2):
 def bidirectional_similarity_prod(interval1, interval2):
     """
     Calculate the product bidirectional subset similarity between two intervals (1D or multi-D).
-    Supports vectorized computation for multiple intervals.
 
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
@@ -395,7 +391,6 @@ def bidirectional_similarity_prod(interval1, interval2):
 def hedjazi_similarity(interval1, interval2):
     """
     Calculate the marginal similarity (generalized Jaccard) between two intervals (1D or multi-D).
-    Supports vectorized computation for multiple intervals.
 
     Parameters:
         interval1: Single interval [min, max], multi-dimensional array of shape (n_dims, 2),
